@@ -51,14 +51,18 @@ TowerWars est désactivé par défaut (`orchestrator.towerwars.enabled=false`) e
 
 ## Maps sur S3
 
-Avec `s3.enabled=true`, l'orchestrateur découvre les maps sous `s3://<bucket>/<prefix><nom>/{world.zip,arena.json}` et les injecte dans chaque pod de jeu via l'`initContainer` `map-sync`. En k3d, un serveur RustFS est déployé dans le cluster.
+Avec `s3.enabled=true`, les maps vivent dans le bucket `hypolia-maps`, une par dossier `<jeu>/<map>/{world.zip,arena.json}` :
+
+- `sheepwars/<map>/` : l'orchestrateur tourne entre toutes les maps présentes, et l'`initContainer` `map-sync` copie la map choisie dans chaque pod ;
+- `towerwars/<map>/` : la map précuite nommée par `orchestrator.towerwars.map`.
+
+En k3d, un serveur RustFS est déployé dans le cluster.
 
 ```bash
-./deploy/scripts/upload-map.sh steampunk ../sheepwars/server
-./deploy/scripts/upload-map.sh ma-map /chemin/world.zip /chemin/arena.json
+./deploy/scripts/upload-map.sh sheepwars steampunk ../sheepwars/server
+./deploy/scripts/upload-map.sh towerwars imperial ../towerwars/dist/towerwars-maps/imperial
+./deploy/scripts/upload-map.sh sheepwars ma-map /chemin/world.zip /chemin/arena.json
 ```
-
-Les cartes TowerWars vivent sous `orchestrator.towerwars.mapPrefix` (`towerwars/`), jamais sous `s3.prefix`.
 
 ## Documentation
 

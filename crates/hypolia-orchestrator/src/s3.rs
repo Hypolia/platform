@@ -88,8 +88,11 @@ impl S3Config {
                 let secret_access_key = non_empty_env("S3_SECRET_ACCESS_KEY").ok_or_else(|| {
                     S3Error::IncompleteConfig("S3_SECRET_ACCESS_KEY manquant".to_owned())
                 })?;
-                let prefix =
-                    normalize_prefix(non_empty_env("S3_PREFIX").as_deref().unwrap_or("maps/"));
+                let prefix = normalize_prefix(
+                    non_empty_env("S3_PREFIX")
+                        .as_deref()
+                        .unwrap_or("sheepwars/"),
+                );
                 let region = non_empty_env("S3_REGION").unwrap_or_else(|| "us-east-1".to_owned());
                 let path_style = !matches!(
                     non_empty_env("S3_PATH_STYLE")

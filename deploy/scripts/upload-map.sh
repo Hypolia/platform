@@ -1,13 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ $# -lt 2 || $# -gt 3 ]]; then
+if [[ $# -lt 3 || $# -gt 4 ]]; then
   echo "Usage :" >&2
-  echo "  $0 <nom-map> <dossier-map>" >&2
-  echo "  $0 <nom-map> <world.zip> <arena.json>" >&2
+  echo "  $0 <jeu> <nom-map> <dossier-map>" >&2
+  echo "  $0 <jeu> <nom-map> <world.zip> <arena.json>" >&2
+  echo "<jeu> : sheepwars ou towerwars. La map va sous s3://<bucket>/<jeu>/<nom-map>/." >&2
   exit 1
 fi
 
+GAME="$1"
+case "${GAME}" in
+  sheepwars|towerwars) ;;
+  *) echo "Erreur : jeu inconnu (${GAME}), attendu sheepwars ou towerwars." >&2; exit 1 ;;
+esac
+shift
 MAP_NAME="$1"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
@@ -38,8 +45,8 @@ fi
 KUBE_CONTEXT="${KUBE_CONTEXT:-k3d-hypolia}"
 KUBE_NAMESPACE="${KUBE_NAMESPACE:-hypolia}"
 S3_BUCKET="${S3_BUCKET:-hypolia-maps}"
-S3_PREFIX="${S3_PREFIX:-maps/}"
-S3_REGION="${S3_REGION:-us-east-1}"
+S3_PREFIX="${GAME}/"
+S3_REGION="${S3_REGION:-eu-west-3}"
 S3_PATH_STYLE="${S3_PATH_STYLE:-true}"
 
 PF_PID=""

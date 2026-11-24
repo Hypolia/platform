@@ -1,0 +1,250 @@
+global:
+  imageRegistry: ghcr.io/hypolia
+  imageTag: latest
+  # true en staging et en prod : refuse un imageTag vide ou "latest".
+  immutableTags: false
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+
+secrets:
+  # En production, fournir les noms de Secrets existants (créés hors Git / ExternalSecrets)
+  existingForwardingSecret: ""
+  # Valeur utilisée uniquement si existingForwardingSecret est vide (dev / k3d)
+  devForwardingSecret: "hypolia-dev-forwarding-secret"
+
+  existingOrchestratorTokenSecret: ""
+  devOrchestratorToken: ""
+
+  existingFerrisKeySecret: ""
+
+progression:
+  # Secret de connexion Postgres créé par CloudNativePG (ex. hypolia-db-app).
+  # Vide : progression en mémoire, perdue au redémarrage (dev / k3d uniquement).
+  existingDatabaseSecret: ""
+  databaseUriKey: uri
+
+velocity:
+  replicas: 1
+  image:
+    repository: velocity
+    tag: ""
+  onlineMode: true
+  showMaxPlayers: 100
+  motd: "<gold><bold>Hypolia</bold></gold> <dark_gray>•</dark_gray> <light_purple>Mini-Jeux & SheepWars</light_purple>"
+  javaOpts: "-Xms512M -Xmx512M -XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200"
+  service:
+    type: LoadBalancer
+    port: 25565
+    nodePort: null
+    annotations: {}
+  resources:
+    requests:
+      cpu: 250m
+      memory: 640Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+orchestrator:
+  replicas: 1
+  image:
+    repository: orchestrator
+    tag: ""
+  port: 8080
+  logLevel: info
+  queue:
+    minPlayers: 1
+  sheepwars:
+    # Nombre minimum de serveurs chauds (0 = scale-to-zero)
+    minReplicas: 1
+    # Nombre maximum k de serveurs SheepWars simultanés
+    maxReplicas: 5
+    # Serveurs en attente maintenus dès qu'il y a de la demande
+    standbyServers: 1
+    maxPlayers: 16
+    idleTtlSecs: 180
+    startingTimeoutSecs: 120
+    transferTimeoutSecs: 15
+    emptyGraceSecs: 30
+    endingTimeoutSecs: 60
+    heartbeatTimeoutSecs: 30
+    # Serveurs SheepWars en objets SheepWarsServer (docs/specs/sheepwars-crd.md).
+    # L'AppProject ArgoCD doit autoriser CustomResourceDefinition avant d'activer.
+    crd:
+      enabled: false
+    reconcileIntervalMs: 1000
+  towerwars:
+    # Désactivé par défaut : aucun Pod, CRD ni variable TOWERWARS_* tant que false.
+    # Ordre de déploiement (ADR 0011) : tous les clients (lobby, proxy) en version N, puis true.
+    enabled: false
+    minReplicas: 0
+    maxReplicas: 3
+    standbyServers: 1
+    maxPlayers: 6
+    # ignoré pour TowerWars (taille choisie au lobby)
+    queueMinPlayers: 4
+    mode: solo
+    # Vide : carte intégrée du plugin (monde vide, construit au démarrage, ~22 s).
+    # Sinon (avec s3.enabled) : nom d'une map téléversée par deploy/scripts/bake-towerwars-map.sh,
+    # lue sous s3://<bucket>/<mapPrefix><map>/{world.zip,arena.json}. Le monde arrive déjà construit.
+    map: ""
+    # Préfixe distinct de s3.prefix : la rotation SheepWars ne doit jamais voir ces maps.
+    mapPrefix: "towerwars/"
+    idleTtlSecs: 180
+    startingTimeoutSecs: 120
+    emptyGraceSecs: 30
+    endingTimeoutSecs: 60
+    heartbeatTimeoutSecs: 30
+    # Serveurs TowerWars en objets TowerWarsServer (docs/adr/0011).
+    # L'AppProject ArgoCD doit autoriser CustomResourceDefinition avant d'activer.
+    crd:
+      enabled: false
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+lobby:
+  # 2 instances : une mise à jour draine une instance pendant que l'autre sert.
+  replicas: 2
+  # Temps laissé aux joueurs pour partir vers l'autre instance avant l'arrêt.
+  drainTimeoutSecs: 60
+  storage:
+    # Secret CloudNativePG du lobby (ex. hypolia-lobby-db-app).
+    # Vide : layout et sessions en fichiers, perdus au redémarrage (dev / k3d).
+    existingDatabaseSecret: ""
+    databaseUriKey: uri
+  rspigotImage:
+    repository: lobby-server
+    tag: ""
+  pluginImage:
+    repository: lobby
+    tag: ""
+  port: 25565
+  grpcPort: 25580
+  maxPlayers: 100
+  ferriskey:
+    url: "https://auth.ferrislabs.fr"
+    publicUrl: ""
+    realm: "capitainerie"
+    clientId: "minecraft"
+    scope: "openid profile email roles"
+  capitainerie:
+    url: ""
+    consoleUrl: ""
+    resource: ""
+    realm: ""
+    clientId: ""
+  resources:
+    rspigot:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: "2"
+        memory: 2Gi
+    plugin:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+
+sheepwars:
+  rspigotImage:
+    repository: sheepwars-server
+    tag: ""
+  port: 25565
+  grpcPort: 25581
+  resources:
+    rspigot:
+      requests:
+        cpu: 500m
+        memory: 768Mi
+      limits:
+        cpu: "2"
+        memory: 1536Mi
+  # Sidecar plugin SheepWars (hypolia-sheepwars)
+  pluginSidecar:
+    enabled: true
+    image:
+      repository: sheepwars
+      tag: ""
+    extraEnv: []
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+  nodeSelector: {}
+  tolerations: []
+
+towerwars:
+  rspigotImage:
+    repository: towerwars-server
+    tag: ""
+  port: 25565
+  grpcPort: 25582
+  resources:
+    rspigot:
+      requests:
+        cpu: 500m
+        memory: 768Mi
+      limits:
+        cpu: "2"
+        memory: 1536Mi
+  pluginSidecar:
+    enabled: true
+    image:
+      repository: towerwars
+      tag: ""
+    extraEnv: []
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+  nodeSelector: {}
+  tolerations: []
+
+# Stockage S3 multi-maps pour les arènes SheepWars
+s3:
+  enabled: false
+  endpoint: ""
+  bucket: "hypolia-maps"
+  prefix: "maps/"
+  region: "us-east-1"
+  pathStyle: true
+  cacheTtlSecs: 30
+  # Optionnel : forcer une map fixe (sinon rotation automatique parmi les maps S3)
+  fixedMap: ""
+  # En production, fournir un Secret existant contenant accessKeyId et secretAccessKey
+  existingSecret: ""
+  devAccessKeyId: ""
+  devSecretAccessKey: ""
+
+# Serveur S3 compatible local (uniquement pour dev / k3d)
+rustfs:
+  enabled: false
+  image:
+    repository: rustfs/rustfs
+    tag: latest
+  persistence:
+    enabled: false
+    size: 2Gi
+    storageClass: ""
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi

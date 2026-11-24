@@ -1,0 +1,241 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "hypolia.fullname" . }}-lobby
+  labels:
+    {{- include "hypolia.labels" . | nindent 4 }}
+    app.kubernetes.io/component: lobby
+spec:
+  replicas: {{ .Values.lobby.replicas }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      {{- include "hypolia.labels" . | nindent 6 }}
+      app.kubernetes.io/component: lobby
+  template:
+    metadata:
+      labels:
+        {{- include "hypolia.labels" . | nindent 8 }}
+        app.kubernetes.io/component: lobby
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ add (int .Values.lobby.drainTimeoutSecs) 15 }}
+      initContainers:
+        - name: lobby-plugin
+          restartPolicy: Always
+          image: {{ include "hypolia.image" (dict "global" .Values.global "repository" .Values.lobby.pluginImage.repository "tag" .Values.lobby.pluginImage.tag) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          env:
+            - name: RSPIGOT_URL
+              value: {{ printf "http://127.0.0.1:%d" (int .Values.lobby.grpcPort) | quote }}
+            - name: RSPIGOT_PLUGIN_NAME
+              value: "hypolia-lobby"
+            - name: ORCHESTRATOR_URL
+              value: {{ printf "http://%s-orchestrator:%d" (include "hypolia.fullname" .) (int .Values.orchestrator.port) | quote }}
+            {{- if (include "hypolia.orchestratorTokenSecretName" .) }}
+            - name: ORCHESTRATOR_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "hypolia.orchestratorTokenSecretName" . }}
+                  key: token
+            {{- end }}
+            - name: FERRISKEY_URL
+              value: {{ .Values.lobby.ferriskey.url | quote }}
+            {{- if .Values.lobby.ferriskey.publicUrl }}
+            - name: FERRISKEY_PUBLIC_URL
+              value: {{ .Values.lobby.ferriskey.publicUrl | quote }}
+            {{- end }}
+            - name: FERRISKEY_REALM
+              value: {{ .Values.lobby.ferriskey.realm | quote }}
+            - name: FERRISKEY_CLIENT_ID
+              value: {{ .Values.lobby.ferriskey.clientId | quote }}
+            - name: FERRISKEY_SCOPE
+              value: {{ .Values.lobby.ferriskey.scope | quote }}
+            {{- if .Values.secrets.existingFerrisKeySecret }}
+            - name: FERRISKEY_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingFerrisKeySecret }}
+                  key: client-secret
+                  optional: true
+            - name: CAPITAINERIE_OBSERVER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingFerrisKeySecret }}
+                  key: observer-token
+                  optional: true
+            {{- end }}
+            {{- if .Values.lobby.capitainerie.url }}
+            - name: CAPITAINERIE_URL
+              value: {{ .Values.lobby.capitainerie.url | quote }}
+            {{- end }}
+            {{- if .Values.lobby.capitainerie.consoleUrl }}
+            - name: CAPITAINERIE_CONSOLE_URL
+              value: {{ .Values.lobby.capitainerie.consoleUrl | quote }}
+            {{- end }}
+            {{- if .Values.lobby.capitainerie.resource }}
+            - name: CAPITAINERIE_RESOURCE
+              value: {{ .Values.lobby.capitainerie.resource | quote }}
+            {{- end }}
+            {{- if .Values.lobby.capitainerie.realm }}
+            - name: CAPITAINERIE_REALM
+              value: {{ .Values.lobby.capitainerie.realm | quote }}
+            {{- end }}
+            {{- if .Values.lobby.capitainerie.clientId }}
+            - name: CAPITAINERIE_CLIENT_ID
+              value: {{ .Values.lobby.capitainerie.clientId | quote }}
+            {{- end }}
+            - name: LOBBY_LAYOUT_PATH
+              value: "/app/lobby.json"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: SERVER_PORT
+              value: {{ .Values.lobby.port | quote }}
+            {{- if .Values.lobby.storage.existingDatabaseSecret }}
+            - name: LOBBY_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.lobby.storage.existingDatabaseSecret }}
+                  key: {{ .Values.lobby.storage.databaseUriKey }}
+            {{- end }}
+            - name: LOBBY_SESSIONS_PATH
+              value: "/tmp/.sessions.json"
+          {{- with .Values.lobby.resources.plugin }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      containers:
+        - name: rspigot
+          image: {{ include "hypolia.image" (dict "global" .Values.global "repository" .Values.lobby.rspigotImage.repository "tag" .Values.lobby.rspigotImage.tag) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          env:
+            - name: SERVER_PORT
+              value: {{ .Values.lobby.port | quote }}
+            - name: MAX_PLAYERS
+              value: {{ .Values.lobby.maxPlayers | quote }}
+            - name: PLUGIN_GRPC_BIND
+              value: {{ printf "127.0.0.1:%d" (int .Values.lobby.grpcPort) | quote }}
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: ORCHESTRATOR_URL
+              value: {{ printf "http://%s-orchestrator:%d" (include "hypolia.fullname" .) (int .Values.orchestrator.port) | quote }}
+            {{- if (include "hypolia.orchestratorTokenSecretName" .) }}
+            - name: ORCHESTRATOR_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "hypolia.orchestratorTokenSecretName" . }}
+                  key: token
+            {{- end }}
+            - name: DRAIN_TIMEOUT_SECS
+              value: {{ .Values.lobby.drainTimeoutSecs | quote }}
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "/etc/hypolia/drain/drain.sh"]
+          ports:
+            - name: minecraft
+              containerPort: {{ .Values.lobby.port }}
+              protocol: TCP
+            - name: grpc-plugin
+              containerPort: {{ .Values.lobby.grpcPort }}
+              protocol: TCP
+          readinessProbe:
+            tcpSocket:
+              port: minecraft
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: minecraft
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          {{- with .Values.lobby.resources.rspigot }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: forwarding-secret
+              mountPath: /etc/hypolia/forwarding
+              readOnly: true
+            - name: lobby-data
+              mountPath: /data
+            - name: drain-script
+              mountPath: /etc/hypolia/drain
+              readOnly: true
+      volumes:
+        - name: forwarding-secret
+          secret:
+            secretName: {{ include "hypolia.forwardingSecretName" . }}
+        - name: lobby-data
+          emptyDir: {}
+        - name: drain-script
+          configMap:
+            name: {{ include "hypolia.fullname" . }}-lobby-drain
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "hypolia.fullname" . }}-lobby
+  labels:
+    {{- include "hypolia.labels" . | nindent 4 }}
+    app.kubernetes.io/component: lobby
+spec:
+  selector:
+    {{- include "hypolia.labels" . | nindent 4 }}
+    app.kubernetes.io/component: lobby
+  ports:
+    - name: minecraft
+      port: {{ .Values.lobby.port }}
+      targetPort: minecraft
+      protocol: TCP
+{{- if gt (int .Values.lobby.replicas) 1 }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "hypolia.fullname" . }}-lobby
+  labels:
+    {{- include "hypolia.labels" . | nindent 4 }}
+    app.kubernetes.io/component: lobby
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "hypolia.labels" . | nindent 6 }}
+      app.kubernetes.io/component: lobby
+{{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "hypolia.fullname" . }}-lobby-drain
+  labels:
+    {{- include "hypolia.labels" . | nindent 4 }}
+    app.kubernetes.io/component: lobby
+data:
+  drain.sh: |
+    #!/bin/sh
+    url="${ORCHESTRATOR_URL}/api/v1/servers/${POD_NAME}/drain"
+    deadline=$(( $(date +%s) + ${DRAIN_TIMEOUT_SECS:-60} ))
+    while [ "$(date +%s)" -lt "$deadline" ]; do
+      body=$(curl -sS -m 5 -X POST -H "Authorization: Bearer ${ORCHESTRATOR_TOKEN}" "$url")
+      remaining=$(printf '%s' "$body" | sed -n 's/.*"remaining_players":\([0-9]*\).*/\1/p')
+      [ "$remaining" = "0" ] && exit 0
+      sleep 2
+    done
+    exit 0

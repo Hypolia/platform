@@ -1,0 +1,56 @@
+# Surcharges pour tests locaux sur k3d / Docker Desktop
+global:
+  imageTag: dev
+  imagePullPolicy: IfNotPresent
+
+velocity:
+  onlineMode: false
+  service:
+    type: LoadBalancer
+
+orchestrator:
+  queue:
+    minPlayers: 1
+  sheepwars:
+    minReplicas: 1
+    maxReplicas: 5
+    standbyServers: 1
+    idleTtlSecs: 60
+  towerwars:
+    enabled: true
+    minReplicas: 0
+    maxReplicas: 2
+    standbyServers: 1
+    idleTtlSecs: 60
+    # Carte précuite téléversée sur RustFS : s3://hypolia-maps/towerwars/imperial/
+    # (deploy/scripts/bake-towerwars-map.sh puis upload-map.sh, voir README).
+    map: imperial
+
+lobby:
+  replicas: 1
+  ferriskey:
+    url: "http://host.docker.internal:3333"
+    publicUrl: "http://localhost:3333"
+    realm: "capitainerie"
+    clientId: "minecraft"
+  capitainerie:
+    url: "http://host.docker.internal:4100"
+    consoleUrl: "http://localhost:4080"
+    resource: "http://localhost:4100"
+
+s3:
+  enabled: true
+  endpoint: "http://hypolia-rustfs:9000"
+  bucket: "hypolia-maps"
+  prefix: "maps/"
+  region: "us-east-1"
+  pathStyle: true
+  cacheTtlSecs: 10
+  devAccessKeyId: "hypolia"
+  devSecretAccessKey: "hypolia-dev-s3-secret"
+
+rustfs:
+  enabled: true
+  persistence:
+    enabled: true
+    size: 2Gi

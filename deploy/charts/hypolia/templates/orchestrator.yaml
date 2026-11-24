@@ -1,0 +1,211 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "hypolia.fullname" . }}-orchestrator
+  labels:
+    {{- include "hypolia.labels" . | nindent 4 }}
+    app.kubernetes.io/component: orchestrator
+spec:
+  replicas: {{ .Values.orchestrator.replicas }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "hypolia.labels" . | nindent 6 }}
+      app.kubernetes.io/component: orchestrator
+  template:
+    metadata:
+      annotations:
+        checksum/sheepwars-template: {{ include (print $.Template.BasePath "/sheepwars-template-cm.yaml") . | sha256sum }}
+        {{- if .Values.orchestrator.towerwars.enabled }}
+        checksum/towerwars-template: {{ include (print $.Template.BasePath "/towerwars-template-cm.yaml") . | sha256sum }}
+        {{- end }}
+      labels:
+        {{- include "hypolia.labels" . | nindent 8 }}
+        app.kubernetes.io/component: orchestrator
+    spec:
+      serviceAccountName: {{ include "hypolia.fullname" . }}-orchestrator
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: orchestrator
+          image: {{ include "hypolia.image" (dict "global" .Values.global "repository" .Values.orchestrator.image.repository "tag" .Values.orchestrator.image.tag) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          env:
+            - name: RUST_LOG
+              value: {{ .Values.orchestrator.logLevel | quote }}
+            - name: ORCHESTRATOR_BIND
+              value: {{ printf "0.0.0.0:%d" (int .Values.orchestrator.port) | quote }}
+            - name: ORCHESTRATOR_BACKEND
+              value: "kubernetes"
+            - name: K8S_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: ORCHESTRATOR_PUBLIC_URL
+              value: {{ printf "http://%s-orchestrator:%d" (include "hypolia.fullname" .) (int .Values.orchestrator.port) | quote }}
+            - name: LOBBY_SERVER_NAME
+              value: "lobby"
+            {{- if .Values.progression.existingDatabaseSecret }}
+            - name: PROGRESSION_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.progression.existingDatabaseSecret }}
+                  key: {{ .Values.progression.databaseUriKey }}
+            {{- end }}
+            - name: QUEUE_MIN_PLAYERS
+              value: {{ .Values.orchestrator.queue.minPlayers | quote }}
+            - name: SHEEPWARS_MAX_PLAYERS
+              value: {{ .Values.orchestrator.sheepwars.maxPlayers | quote }}
+            - name: SHEEPWARS_MIN_REPLICAS
+              value: {{ .Values.orchestrator.sheepwars.minReplicas | quote }}
+            - name: SHEEPWARS_MAX_REPLICAS
+              value: {{ .Values.orchestrator.sheepwars.maxReplicas | quote }}
+            - name: SHEEPWARS_STANDBY_SERVERS
+              value: {{ .Values.orchestrator.sheepwars.standbyServers | quote }}
+            - name: SHEEPWARS_IDLE_TTL_SECS
+              value: {{ .Values.orchestrator.sheepwars.idleTtlSecs | quote }}
+            - name: SHEEPWARS_STARTING_TIMEOUT_SECS
+              value: {{ .Values.orchestrator.sheepwars.startingTimeoutSecs | quote }}
+            - name: TRANSFER_TIMEOUT_SECS
+              value: {{ .Values.orchestrator.sheepwars.transferTimeoutSecs | quote }}
+            - name: SHEEPWARS_EMPTY_GRACE_SECS
+              value: {{ .Values.orchestrator.sheepwars.emptyGraceSecs | quote }}
+            - name: SHEEPWARS_ENDING_TIMEOUT_SECS
+              value: {{ .Values.orchestrator.sheepwars.endingTimeoutSecs | quote }}
+            - name: SHEEPWARS_HEARTBEAT_TIMEOUT_SECS
+              value: {{ .Values.orchestrator.sheepwars.heartbeatTimeoutSecs | quote }}
+            - name: SHEEPWARS_CRD_ENABLED
+              value: {{ .Values.orchestrator.sheepwars.crd.enabled | quote }}
+            - name: RECONCILE_INTERVAL_MS
+              value: {{ .Values.orchestrator.sheepwars.reconcileIntervalMs | quote }}
+            - name: SHEEPWARS_PORT
+              value: {{ .Values.sheepwars.port | quote }}
+            - name: SHEEPWARS_POD_TEMPLATE_PATH
+              value: "/etc/hypolia/template/pod-template.yaml"
+            {{- if .Values.orchestrator.towerwars.enabled }}
+            - name: TOWERWARS_ENABLED
+              value: "true"
+            - name: TOWERWARS_MAX_PLAYERS
+              value: {{ .Values.orchestrator.towerwars.maxPlayers | quote }}
+            - name: TOWERWARS_MIN_REPLICAS
+              value: {{ .Values.orchestrator.towerwars.minReplicas | quote }}
+            - name: TOWERWARS_MAX_REPLICAS
+              value: {{ .Values.orchestrator.towerwars.maxReplicas | quote }}
+            - name: TOWERWARS_STANDBY_SERVERS
+              value: {{ .Values.orchestrator.towerwars.standbyServers | quote }}
+            - name: TOWERWARS_QUEUE_MIN_PLAYERS
+              value: {{ .Values.orchestrator.towerwars.queueMinPlayers | quote }}
+            - name: TOWERWARS_IDLE_TTL_SECS
+              value: {{ .Values.orchestrator.towerwars.idleTtlSecs | quote }}
+            - name: TOWERWARS_STARTING_TIMEOUT_SECS
+              value: {{ .Values.orchestrator.towerwars.startingTimeoutSecs | quote }}
+            - name: TOWERWARS_EMPTY_GRACE_SECS
+              value: {{ .Values.orchestrator.towerwars.emptyGraceSecs | quote }}
+            - name: TOWERWARS_ENDING_TIMEOUT_SECS
+              value: {{ .Values.orchestrator.towerwars.endingTimeoutSecs | quote }}
+            - name: TOWERWARS_HEARTBEAT_TIMEOUT_SECS
+              value: {{ .Values.orchestrator.towerwars.heartbeatTimeoutSecs | quote }}
+            - name: TOWERWARS_CRD_ENABLED
+              value: {{ .Values.orchestrator.towerwars.crd.enabled | quote }}
+            - name: TOWERWARS_PORT
+              value: {{ .Values.towerwars.port | quote }}
+            - name: TOWERWARS_POD_TEMPLATE_PATH
+              value: "/etc/hypolia/towerwars-template/pod-template.yaml"
+            {{- if .Values.orchestrator.towerwars.map }}
+            - name: TOWERWARS_MAP
+              value: {{ .Values.orchestrator.towerwars.map | quote }}
+            {{- end }}
+            {{- end }}
+            {{- if (include "hypolia.orchestratorTokenSecretName" .) }}
+            - name: ORCHESTRATOR_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "hypolia.orchestratorTokenSecretName" . }}
+                  key: token
+            {{- end }}
+            {{- if .Values.s3.enabled }}
+            - name: S3_ENDPOINT
+              value: {{ .Values.s3.endpoint | quote }}
+            - name: S3_BUCKET
+              value: {{ .Values.s3.bucket | quote }}
+            - name: S3_PREFIX
+              value: {{ .Values.s3.prefix | quote }}
+            - name: S3_REGION
+              value: {{ .Values.s3.region | quote }}
+            - name: S3_PATH_STYLE
+              value: {{ .Values.s3.pathStyle | quote }}
+            - name: S3_CACHE_TTL_SECS
+              value: {{ .Values.s3.cacheTtlSecs | quote }}
+            {{- if .Values.s3.fixedMap }}
+            - name: SHEEPWARS_MAP
+              value: {{ .Values.s3.fixedMap | quote }}
+            {{- end }}
+            - name: S3_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "hypolia.s3SecretName" . }}
+                  key: accessKeyId
+            - name: S3_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "hypolia.s3SecretName" . }}
+                  key: secretAccessKey
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.orchestrator.port }}
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          {{- with .Values.orchestrator.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: pod-template
+              mountPath: /etc/hypolia/template
+              readOnly: true
+            {{- if .Values.orchestrator.towerwars.enabled }}
+            - name: towerwars-pod-template
+              mountPath: /etc/hypolia/towerwars-template
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: pod-template
+          configMap:
+            name: {{ include "hypolia.fullname" . }}-sheepwars-template
+        {{- if .Values.orchestrator.towerwars.enabled }}
+        - name: towerwars-pod-template
+          configMap:
+            name: {{ include "hypolia.fullname" . }}-towerwars-template
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "hypolia.fullname" . }}-orchestrator
+  labels:
+    {{- include "hypolia.labels" . | nindent 4 }}
+    app.kubernetes.io/component: orchestrator
+spec:
+  selector:
+    {{- include "hypolia.labels" . | nindent 4 }}
+    app.kubernetes.io/component: orchestrator
+  ports:
+    - name: http
+      port: {{ .Values.orchestrator.port }}
+      targetPort: http
+      protocol: TCP

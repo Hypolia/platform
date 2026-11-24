@@ -1,0 +1,54 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+edition = "2024"
+version = "0.1.0"
+license = "MIT"
+rust-version = "1.90"
+
+[workspace.dependencies]
+hypolia-progression = { path = "../sdk/crates/hypolia-progression" }
+hypolia-progression-pg = { path = "crates/hypolia-progression-pg" }
+hypolia-protocol = { path = "../sdk/crates/hypolia-protocol" }
+
+axum = "0.8"
+chrono = "0.4"
+dotenvy = "0.15"
+futures-util = "0.3"
+k8s-openapi = { version = "0.24", features = ["v1_31"] }
+kube = { version = "0.98", default-features = false, features = ["client", "derive", "runtime", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
+schemars = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+sha2 = "0.10"
+sqlx = { version = "0.8", default-features = false, features = ["chrono", "json", "macros", "migrate", "postgres", "runtime-tokio", "tls-rustls-ring-webpki", "uuid"] }
+testcontainers-modules = { version = "0.15", features = ["postgres"] }
+thiserror = "2"
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+url = "2.5"
+uuid = { version = "1", features = ["serde", "v4"] }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+
+[profile.release.package."*"]
+codegen-units = 16
+
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+opt-level = 2

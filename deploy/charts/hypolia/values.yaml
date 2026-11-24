@@ -85,11 +85,9 @@ orchestrator:
     queueMinPlayers: 4
     mode: solo
     # Vide : carte intégrée du plugin (monde vide, construit au démarrage, ~22 s).
-    # Sinon (avec s3.enabled) : nom d'une map téléversée par deploy/scripts/bake-towerwars-map.sh,
-    # lue sous s3://<bucket>/<mapPrefix><map>/{world.zip,arena.json}. Le monde arrive déjà construit.
+    # Sinon (avec s3.enabled) : nom d'une map précuite (bake-map.sh de hypolia/towerwars),
+    # lue sous s3://<bucket>/towerwars/<map>/{world.zip,arena.json}. Le monde arrive déjà construit.
     map: ""
-    # Préfixe distinct de s3.prefix : la rotation SheepWars ne doit jamais voir ces maps.
-    mapPrefix: "towerwars/"
     idleTtlSecs: 180
     startingTimeoutSecs: 120
     emptyGraceSecs: 30
@@ -215,12 +213,12 @@ towerwars:
   nodeSelector: {}
   tolerations: []
 
-# Stockage S3 multi-maps pour les arènes SheepWars
+# Stockage S3 des maps, une par dossier <jeu>/<map>/{world.zip,arena.json} :
+# sheepwars/<map>/ (rotation entre toutes les maps) et towerwars/<map>/.
 s3:
   enabled: false
   endpoint: ""
   bucket: "hypolia-maps"
-  prefix: "maps/"
   region: "us-east-1"
   pathStyle: true
   cacheTtlSecs: 30

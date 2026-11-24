@@ -45,7 +45,7 @@ data:
             - name: S3_BUCKET
               value: {{ .Values.s3.bucket | quote }}
             - name: S3_PREFIX
-              value: {{ .Values.orchestrator.towerwars.mapPrefix | quote }}
+              value: "towerwars/"
             - name: S3_REGION
               value: {{ .Values.s3.region | quote }}
             - name: S3_PATH_STYLE

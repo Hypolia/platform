@@ -23,7 +23,7 @@ orchestrator:
     standbyServers: 1
     idleTtlSecs: 60
     # Carte précuite téléversée sur RustFS : s3://hypolia-maps/towerwars/imperial/
-    # (deploy/scripts/bake-towerwars-map.sh puis upload-map.sh, voir README).
+    # (bake-map.sh de hypolia/towerwars puis upload-map.sh, voir README).
     map: imperial
 
 lobby:
@@ -42,7 +42,6 @@ s3:
   enabled: true
   endpoint: "http://hypolia-rustfs:9000"
   bucket: "hypolia-maps"
-  prefix: "maps/"
   region: "us-east-1"
   pathStyle: true
   cacheTtlSecs: 10

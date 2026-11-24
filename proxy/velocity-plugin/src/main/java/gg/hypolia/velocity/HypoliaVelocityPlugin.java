@@ -7,10 +7,15 @@ import com.google.gson.JsonObject;
 import com.velocitypowered.api.command.SimpleCommand;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.connection.DisconnectEvent;
+import com.velocitypowered.api.event.connection.PostLoginEvent;
+import com.velocitypowered.api.event.permission.PermissionsSetupEvent;
 import com.velocitypowered.api.event.player.KickedFromServerEvent;
 import com.velocitypowered.api.event.player.PlayerChooseInitialServerEvent;
+import com.velocitypowered.api.event.player.ServerPreConnectEvent;
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
 import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
+import com.velocitypowered.api.permission.PermissionFunction;
+import com.velocitypowered.api.permission.Tristate;
 import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
@@ -59,6 +64,8 @@ public final class HypoliaVelocityPlugin {
     private final Set<String> lobbyInstances = ConcurrentHashMap.newKeySet();
     private final String version;
     private final Set<String> handledTransfers = ConcurrentHashMap.newKeySet();
+    private final Map<UUID, String> ranks = new ConcurrentHashMap<>();
+    private final Map<UUID, String> orchestratorTransfers = new ConcurrentHashMap<>();
     private final AtomicBoolean running = new AtomicBoolean(true);
 
     private volatile String lobbyServerName = "lobby";
@@ -99,6 +106,11 @@ public final class HypoliaVelocityPlugin {
                 .repeat(10, TimeUnit.SECONDS)
                 .schedule();
 
+        proxy.getScheduler()
+                .buildTask(this, this::refreshOnlineRanks)
+                .repeat(30, TimeUnit.SECONDS)
+                .schedule();
+
         sseThread = Thread.ofVirtual().name("hypolia-sse").start(this::runSseLoop);
         logger.info("Hypolia Velocity Router démarré (orchestrator={})", orchestratorUrl);
     }
@@ -112,8 +124,44 @@ public final class HypoliaVelocityPlugin {
     }
 
     @Subscribe
+    public void onPermissionsSetup(PermissionsSetupEvent event) {
+        if (!(event.getSubject() instanceof Player player)) {
+            return;
+        }
+        UUID uuid = player.getUniqueId();
+        PermissionFunction fallback = event.createFunction(player);
+        event.setProvider(subject -> permission -> {
+            var decision = AccessPolicy.permission(permission, isStaff(uuid));
+            return decision == Tristate.UNDEFINED
+                    ? fallback.getPermissionValue(permission)
+                    : decision;
+        });
+    }
+
+    @Subscribe
+    public void onPostLogin(PostLoginEvent event) {
+        refreshRank(event.getPlayer().getUniqueId());
+    }
+
+    @Subscribe
+    public void onServerPreConnect(ServerPreConnectEvent event) {
+        Player player = event.getPlayer();
+        String target = event.getOriginalServer().getServerInfo().getName();
+        boolean targetIsLobby = target.equals(lobbyServerName) || lobbyInstances.contains(target);
+        boolean sentByOrchestrator = target.equals(orchestratorTransfers.get(player.getUniqueId()));
+        if (AccessPolicy.mayConnect(isStaff(player.getUniqueId()), targetIsLobby, sentByOrchestrator)) {
+            return;
+        }
+        event.setResult(ServerPreConnectEvent.ServerResult.denied());
+        player.sendMessage(Component.text(
+                "Rejoins une partie depuis le Hub, avec la file d'attente.", NamedTextColor.RED));
+    }
+
+    @Subscribe
     public void onDisconnect(DisconnectEvent event) {
         UUID uuid = event.getPlayer().getUniqueId();
+        ranks.remove(uuid);
+        orchestratorTransfers.remove(uuid);
         JsonObject body = new JsonObject();
         body.addProperty("player_uuid", uuid.toString());
         postJsonAsync("/api/v1/proxy/player-disconnected", body);
@@ -381,7 +429,9 @@ public final class HypoliaVelocityPlugin {
                 .append(Component.text(targetServerName, NamedTextColor.LIGHT_PURPLE))
                 .append(Component.text(" (" + reason + ")…", NamedTextColor.GRAY)));
 
+        orchestratorTransfers.put(playerUuid, targetServerName);
         player.createConnectionRequest(target).connectWithIndication().whenComplete((ok, err) -> {
+            orchestratorTransfers.remove(playerUuid, targetServerName);
             if (err != null) {
                 logger.warn("Erreur transfert {} -> {}: {}", player.getUsername(), targetServerName, err.getMessage());
                 ackTransfer(transferId, false, err.getMessage());
@@ -390,6 +440,44 @@ public final class HypoliaVelocityPlugin {
                 ackTransfer(transferId, success, success ? null : "Connexion refusée par " + targetServerName);
             }
         });
+    }
+
+    private boolean isStaff(UUID uuid) {
+        return AccessPolicy.isStaff(ranks.get(uuid));
+    }
+
+    private void refreshOnlineRanks() {
+        for (Player player : proxy.getAllPlayers()) {
+            refreshRank(player.getUniqueId());
+        }
+    }
+
+    private void refreshRank(UUID uuid) {
+        HttpRequest.Builder req = HttpRequest.newBuilder()
+                .uri(URI.create(orchestratorUrl + "/api/v1/players/" + uuid + "/profile"))
+                .timeout(Duration.ofSeconds(4))
+                .header("x-hypolia-version", version)
+                .GET();
+        if (apiToken != null) {
+            req.header("Authorization", "Bearer " + apiToken);
+        }
+        http.sendAsync(req.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+                .thenAccept(resp -> {
+                    if (resp.statusCode() != 200) {
+                        return;
+                    }
+                    JsonObject profile = GSON.fromJson(resp.body(), JsonObject.class);
+                    if (profile == null || !profile.has("rank") || profile.get("rank").isJsonNull()) {
+                        return;
+                    }
+                    if (proxy.getPlayer(uuid).isPresent()) {
+                        ranks.put(uuid, profile.get("rank").getAsString());
+                    }
+                })
+                .exceptionally(ex -> {
+                    logger.debug("Grade de {} indisponible: {}", uuid, ex.getMessage());
+                    return null;
+                });
     }
 
     private void ackTransfer(String transferId, boolean success, String message) {

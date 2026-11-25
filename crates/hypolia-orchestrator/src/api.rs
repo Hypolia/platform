@@ -535,16 +535,21 @@ async fn server_heartbeat(
 ) -> Result<Response, ApiError> {
     check_auth(&headers, state.api_token.as_deref())?;
     let server_id = req.server_id.clone();
-    let (events, expected_players) = {
+    let (events, expected_players, teams) = {
         let mut games = state.lock_games();
         let events = games.apply_heartbeat(Instant::now(), req)?;
-        (events, games.expected_players(&server_id))
+        (
+            events,
+            games.expected_players(&server_id),
+            games.teams(&server_id),
+        )
     };
     state.flush_queue_logged().await;
     state.emit_proxy_events(events);
     Ok(match expected_players {
         Some(expected) => Json(HeartbeatResponse {
             expected_players: Some(expected),
+            teams,
         })
         .into_response(),
         None => StatusCode::NO_CONTENT.into_response(),

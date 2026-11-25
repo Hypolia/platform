@@ -29,6 +29,7 @@ fn policy() -> FleetPolicy {
         empty_grace: Duration::from_secs(30),
         ending_timeout: Duration::from_secs(60),
         heartbeat_timeout: Duration::from_secs(30),
+        towerwars_gather_delay: Duration::ZERO,
     }
 }
 
@@ -285,7 +286,7 @@ async fn spec_tw_26_each_game_queue_survives_a_restart(store: QueueStore) {
 
 async fn match_size_survives_a_restart(store: QueueStore) {
     let first = boot_games(&store).await;
-    for (n, size) in [(1, 0), (2, 3), (3, 9)] {
+    for (n, size) in [(1, 0), (2, 2), (3, 9)] {
         let resp = reqwest::Client::new()
             .post(format!("{first}/api/v1/queue/join"))
             .json(&JoinQueueRequest {
@@ -306,7 +307,7 @@ async fn match_size_survives_a_restart(store: QueueStore) {
         .iter()
         .map(|r| r.match_size)
         .collect();
-    assert_eq!(sizes, [1, 3, 1]);
+    assert_eq!(sizes, [1, 2, 1]);
 
     let second = boot_games(&store).await;
     assert_eq!(
@@ -320,7 +321,7 @@ async fn match_size_survives_a_restart(store: QueueStore) {
         .await
         .unwrap()
         .min_players,
-        3
+        4
     );
 }
 

@@ -46,6 +46,7 @@ pub struct GameConfig {
     pub empty_grace: Duration,
     pub ending_timeout: Duration,
     pub heartbeat_timeout: Duration,
+    pub gather_delay: Duration,
     pub pod_template_path: Option<PathBuf>,
     pub image: String,
     pub port: u16,
@@ -107,6 +108,7 @@ impl GameConfig {
             empty_grace: Duration::from_secs(number("EMPTY_GRACE_SECS", 30)),
             ending_timeout: Duration::from_secs(number("ENDING_TIMEOUT_SECS", 60)),
             heartbeat_timeout: Duration::from_secs(number("HEARTBEAT_TIMEOUT_SECS", 30)),
+            gather_delay: Duration::from_secs(number("GATHER_SECS", 20)),
             pod_template_path: var("POD_TEMPLATE_PATH").map(PathBuf::from),
             image: var("IMAGE").unwrap_or_else(|| spec.default_image.to_owned()),
             port: var("PORT")
@@ -263,6 +265,7 @@ impl OrchestratorConfig {
             empty_grace: game.empty_grace,
             ending_timeout: game.ending_timeout,
             heartbeat_timeout: game.heartbeat_timeout,
+            towerwars_gather_delay: game.gather_delay,
         }
     }
 }
@@ -347,9 +350,14 @@ mod tests {
             ("TOWERWARS_MAX_PLAYERS", "12"),
             ("TOWERWARS_POD_TEMPLATE_PATH", "/etc/tw.yaml"),
             ("TOWERWARS_MAP", "test"),
+            ("TOWERWARS_GATHER_SECS", "35"),
             ("SHEEPWARS_MAX_REPLICAS", "7"),
         ]);
         let tower = config.towerwars.as_ref().unwrap();
+        assert_eq!(
+            config.policy(tower).towerwars_gather_delay,
+            Duration::from_secs(35)
+        );
         assert_eq!(tower.game, GameKind::TowerWars);
         assert_eq!(tower.image, "registry/tw:1");
         assert_eq!(tower.port, 25570);
@@ -366,6 +374,16 @@ mod tests {
         assert_eq!(tower.fixed_map.as_deref(), Some("test"));
         assert_eq!(config.sheepwars.max_replicas, 7);
         assert_eq!(config.games().count(), 2);
+    }
+
+    #[test]
+    fn towerwars_gathers_for_twenty_seconds_by_default() {
+        let config = config(&[("TOWERWARS_ENABLED", "true")]);
+        let tower = config.towerwars.as_ref().unwrap();
+        assert_eq!(
+            config.policy(tower).towerwars_gather_delay,
+            Duration::from_secs(20)
+        );
     }
 
     #[test]

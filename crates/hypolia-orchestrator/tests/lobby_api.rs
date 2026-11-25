@@ -24,6 +24,7 @@ async fn spawn() -> String {
         empty_grace: Duration::from_secs(30),
         ending_timeout: Duration::from_secs(60),
         heartbeat_timeout: Duration::from_secs(30),
+        towerwars_gather_delay: Duration::ZERO,
     };
     let state = AppState::new(FleetEngine::new(policy), Some("tok".to_owned()));
     let app = build_router(state);

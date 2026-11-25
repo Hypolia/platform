@@ -27,6 +27,7 @@ fn policy(game: GameKind) -> FleetPolicy {
         empty_grace: Duration::from_secs(30),
         ending_timeout: Duration::from_secs(60),
         heartbeat_timeout: Duration::from_secs(30),
+        towerwars_gather_delay: Duration::ZERO,
     }
 }
 
@@ -148,8 +149,8 @@ async fn spec_tw_26_towerwars_players_are_sent_to_towerwars_servers() {
             .is_success()
     );
 
-    join_sized(&base, 1, GameKind::TowerWars, 2).await;
-    let second = join_sized(&base, 2, GameKind::TowerWars, 2).await;
+    join_sized(&base, 1, GameKind::TowerWars, 1).await;
+    let second = join_sized(&base, 2, GameKind::TowerWars, 1).await;
     assert_eq!(second.status, QueueJoinStatus::Transferring);
     assert_eq!(second.target_server.as_deref(), Some("towerwars-1"));
     assert_eq!(second.min_players, 2);
@@ -301,24 +302,45 @@ async fn heartbeat_answers_204_until_a_match_size_is_assigned_then_200_with_a_bo
 
     let duo = join_sized(&base, 1, GameKind::TowerWars, 2).await;
     assert_eq!(duo.status, QueueJoinStatus::Queued);
-    assert_eq!(duo.min_players, 2);
+    assert_eq!(duo.min_players, 4);
+    for n in 2..=3 {
+        join_sized(&base, n, GameKind::TowerWars, 2).await;
+    }
     let still_waiting = heartbeat_raw(&base, "towerwars-1", ServerPhase::Waiting, &[]).await;
     assert_eq!(still_waiting.status(), StatusCode::NO_CONTENT);
 
-    join_sized(&base, 2, GameKind::TowerWars, 2).await;
+    join_sized(&base, 4, GameKind::TowerWars, 2).await;
     let assigned = heartbeat_raw(&base, "towerwars-1", ServerPhase::Waiting, &[]).await;
     assert_eq!(assigned.status(), StatusCode::OK);
     let body: HeartbeatResponse = assigned.json().await.unwrap();
-    assert_eq!(body.expected_players, Some(2));
+    assert_eq!(body.expected_players, Some(4));
+    assert_eq!(
+        body.teams,
+        [vec![player(1), player(2)], vec![player(3), player(4)]]
+    );
 
     let arriving = heartbeat_raw(&base, "towerwars-1", ServerPhase::Waiting, &[1]).await;
     assert_eq!(arriving.status(), StatusCode::OK);
 
-    let in_game = heartbeat_raw(&base, "towerwars-1", ServerPhase::InGame, &[1, 2]).await;
+    let in_game = heartbeat_raw(&base, "towerwars-1", ServerPhase::InGame, &[1, 2, 3, 4]).await;
     assert_eq!(in_game.status(), StatusCode::OK);
+    let body: HeartbeatResponse = in_game.json().await.unwrap();
+    assert_eq!(body.teams.len(), 2);
 
     let back = heartbeat_raw(&base, "towerwars-1", ServerPhase::Waiting, &[]).await;
     assert_eq!(back.status(), StatusCode::NO_CONTENT);
+}
+
+#[tokio::test]
+async fn solo_heartbeat_carries_one_team_per_player() {
+    let base = both_games().await;
+    heartbeat_raw(&base, "towerwars-1", ServerPhase::Waiting, &[]).await;
+    join_sized(&base, 1, GameKind::TowerWars, 1).await;
+    join_sized(&base, 2, GameKind::TowerWars, 1).await;
+    let assigned = heartbeat_raw(&base, "towerwars-1", ServerPhase::Waiting, &[]).await;
+    let body: HeartbeatResponse = assigned.json().await.unwrap();
+    assert_eq!(body.expected_players, Some(2));
+    assert_eq!(body.teams, [vec![player(1)], vec![player(2)]]);
 }
 
 #[tokio::test]

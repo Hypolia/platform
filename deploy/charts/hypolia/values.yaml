@@ -99,8 +99,9 @@ orchestrator:
     minReplicas: 0
     maxReplicas: 3
     standbyServers: 1
-    maxPlayers: 6
-    # ignoré pour TowerWars (taille choisie au lobby)
+    # Un match Duo compte jusqu'à 12 joueurs (6 équipes de 2), un match Solo jusqu'à 6.
+    maxPlayers: 12
+    # ignoré pour TowerWars (mode Solo ou Duo choisi au lobby, minimum 2 équipes)
     queueMinPlayers: 4
     mode: solo
     # Vide : carte intégrée du plugin (monde vide, construit au démarrage, ~22 s).
@@ -112,6 +113,8 @@ orchestrator:
     emptyGraceSecs: 30
     endingTimeoutSecs: 60
     heartbeatTimeoutSecs: 30
+    # Attente avant de lancer un match incomplet (au moins 2 équipes en file).
+    gatherSecs: 20
     # Serveurs TowerWars en objets TowerWarsServer (docs/adr/0011).
     # L'AppProject ArgoCD doit autoriser CustomResourceDefinition avant d'activer.
     crd:

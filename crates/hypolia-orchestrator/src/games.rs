@@ -108,21 +108,23 @@ impl Games {
             Some(seq) => engine.join_queue_with_seq(now, req, seq),
             None => engine.join_queue(now, req),
         };
-        let events = engine.dispatch(now);
-        let snap = engine.snapshot(now);
-        let post_status = engine.player_status(now, player_uuid);
-        let mut updated = resp;
-        updated.total_queued = post_status.total_queued;
-        updated.ready_servers = snap.ready_servers;
-        updated.active_servers = snap.ready_servers + snap.in_game_servers + snap.starting_servers;
-        if let Some(target) = post_status.target_server {
-            updated.status = QueueJoinStatus::Transferring;
-            updated.position = 0;
-            updated.target_server = Some(target);
-        } else if let Some(pos) = post_status.position {
-            updated.position = pos;
-        }
-        Ok((updated, events))
+        Ok(settle(engine, now, player_uuid, resp))
+    }
+
+    pub fn join_party(
+        &mut self,
+        now: Instant,
+        game: GameKind,
+        party: Uuid,
+        members: Vec<(JoinQueueRequest, Option<u64>)>,
+    ) -> Result<Option<(JoinQueueResponse, Vec<ProxyEvent>)>, GameError> {
+        let Some(leader) = members.first().map(|(req, _)| req.player_uuid) else {
+            return Ok(None);
+        };
+        let engine = self.engine_mut(game)?;
+        Ok(engine
+            .join_queue_party(now, party, members)
+            .map(|resp| settle(engine, now, leader, resp)))
     }
 
     pub fn leave_queue(
@@ -290,6 +292,29 @@ fn game_status(game: GameKind, snap: &FleetStatusSnapshot) -> GameFleetStatus {
         starting_servers: snap.starting_servers,
         queued_players: snap.queued_players.clone(),
     }
+}
+
+fn settle(
+    engine: &mut FleetEngine,
+    now: Instant,
+    player_uuid: Uuid,
+    resp: JoinQueueResponse,
+) -> (JoinQueueResponse, Vec<ProxyEvent>) {
+    let events = engine.dispatch(now);
+    let snap = engine.snapshot(now);
+    let post_status = engine.player_status(now, player_uuid);
+    let mut updated = resp;
+    updated.total_queued = post_status.total_queued;
+    updated.ready_servers = snap.ready_servers;
+    updated.active_servers = snap.ready_servers + snap.in_game_servers + snap.starting_servers;
+    if let Some(target) = post_status.target_server {
+        updated.status = QueueJoinStatus::Transferring;
+        updated.position = 0;
+        updated.target_server = Some(target);
+    } else if let Some(pos) = post_status.position {
+        updated.position = pos;
+    }
+    (updated, events)
 }
 
 #[cfg(test)]

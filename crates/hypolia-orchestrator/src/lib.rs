@@ -9,4 +9,5 @@ pub mod lobby;
 pub mod progression;
 pub mod queue;
 pub mod s3;
+pub mod social;
 pub mod static_backend;

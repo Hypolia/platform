@@ -10,6 +10,7 @@ use uuid::Uuid;
 
 use crate::lobbies;
 use crate::orchestrator::Orchestrator;
+use crate::social::{self, Social};
 
 pub const SERVER_PERMISSION: &str = "hypolia.command.server";
 const HANDLED_TRANSFERS: usize = 4096;
@@ -32,11 +33,13 @@ impl Fleet {
 pub struct Network {
     orchestrator: Orchestrator,
     fleet: Arc<Mutex<Fleet>>,
+    social: Social,
 }
 
 impl Network {
     pub fn new(orchestrator: Orchestrator, lobby_service: String) -> Self {
         Self {
+            social: Social::new(orchestrator.clone()),
             orchestrator,
             fleet: Arc::new(Mutex::new(Fleet {
                 lobby_service,
@@ -247,22 +250,29 @@ impl Plugin for Network {
     }
 
     fn commands(&self) -> Vec<CommandSpec> {
-        vec![
+        let mut commands = vec![
             command("hub").alias("lobby").build(),
             command("server")
                 .permission(SERVER_PERMISSION)
                 .optional("server", ArgumentKind::Server)
                 .build(),
-        ]
+        ];
+        commands.extend(social::commands());
+        commands
     }
 
     async fn login(&self, proxy: &Proxy, player: &Player) {
         self.refresh_permissions(proxy, &player.id).await;
+        if let Some(me) = social::player_ref(player) {
+            self.social.greet(proxy, &me).await;
+        }
     }
 
-    async fn disconnect(&self, _proxy: &Proxy, player: &Player) {
-        if let Ok(id) = Uuid::parse_str(&player.id) {
-            self.orchestrator.disconnected(id).await;
+    async fn disconnect(&self, proxy: &Proxy, player: &Player) {
+        if let Some(me) = social::player_ref(player) {
+            self.social.leave_on_disconnect(proxy, &me).await;
+            self.social.farewell(proxy, &me).await;
+            self.orchestrator.disconnected(me.uuid).await;
         }
     }
 
@@ -309,7 +319,11 @@ impl Plugin for Network {
         match invocation.command.as_str() {
             "hub" => self.hub(proxy, player).await,
             "server" => self.server(proxy, player, first).await,
-            _ => {}
+            name => {
+                self.social
+                    .command(proxy, player, name, &invocation.arguments)
+                    .await;
+            }
         }
     }
 }

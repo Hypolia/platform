@@ -1,10 +1,15 @@
 use std::time::Duration;
 
 use futures_util::StreamExt;
+use hypolia_protocol::social::{
+    FriendOutcome, FriendRequest, FriendsList, Party, PartyOutcome, PartyRequest,
+};
 use hypolia_protocol::{
     PlayerProfile, ProxyDisconnectRequest, ProxyEvent, ProxyStateSnapshot, TransferAckRequest,
 };
 use reqwest::{Client, RequestBuilder};
+use serde::Serialize;
+use serde::de::DeserializeOwned;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
@@ -70,6 +75,61 @@ impl Orchestrator {
             return Err(OrchestratorError::Status(response.status().as_u16()));
         }
         Ok(response.json().await?)
+    }
+
+    async fn get<T: DeserializeOwned>(&self, path: &str) -> Result<T, OrchestratorError> {
+        let response = self
+            .request(self.http.get(format!("{}{path}", self.base)))
+            .timeout(Duration::from_secs(4))
+            .send()
+            .await?;
+        if !response.status().is_success() {
+            return Err(OrchestratorError::Status(response.status().as_u16()));
+        }
+        Ok(response.json().await?)
+    }
+
+    async fn post<B: Serialize, T: DeserializeOwned>(
+        &self,
+        path: &str,
+        body: &B,
+    ) -> Result<T, OrchestratorError> {
+        let response = self
+            .request(self.http.post(format!("{}{path}", self.base)))
+            .timeout(Duration::from_secs(4))
+            .json(body)
+            .send()
+            .await?;
+        if !response.status().is_success() {
+            return Err(OrchestratorError::Status(response.status().as_u16()));
+        }
+        Ok(response.json().await?)
+    }
+
+    pub async fn friends(&self, player: Uuid) -> Result<FriendsList, OrchestratorError> {
+        self.get(&format!("/api/v1/players/{player}/friends")).await
+    }
+
+    pub async fn friend(
+        &self,
+        action: &str,
+        request: &FriendRequest,
+    ) -> Result<FriendOutcome, OrchestratorError> {
+        self.post(&format!("/api/v1/friends/{action}"), request)
+            .await
+    }
+
+    pub async fn party_of(&self, player: Uuid) -> Result<Option<Party>, OrchestratorError> {
+        self.get(&format!("/api/v1/players/{player}/party")).await
+    }
+
+    pub async fn party(
+        &self,
+        action: &str,
+        request: &PartyRequest,
+    ) -> Result<PartyOutcome, OrchestratorError> {
+        self.post(&format!("/api/v1/parties/{action}"), request)
+            .await
     }
 
     pub async fn ack(&self, transfer: Uuid, success: bool, message: Option<String>) {

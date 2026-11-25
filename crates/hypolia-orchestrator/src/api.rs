@@ -33,6 +33,10 @@ use crate::queue::{
     NewQueueEntry, QueueRepository, QueueStore, QueueStoreError, normalize_match_size,
     persist as persist_mutation,
 };
+use crate::social::{FriendStore, FriendStoreError, Friends, PartyBook};
+use hypolia_protocol::social::{
+    FriendOutcome, FriendRequest, FriendsList, Party, PartyOutcome, PartyRequest,
+};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -42,6 +46,8 @@ pub struct AppState {
     pub version: Option<String>,
     pub progression: ProgressionService<ProgressionStore>,
     pub queue: QueueStore,
+    pub friends: Friends,
+    pub parties: Arc<Mutex<PartyBook>>,
     persist_lock: Arc<tokio::sync::Mutex<()>>,
     proxy_version: Arc<Mutex<Option<String>>>,
 }
@@ -62,6 +68,8 @@ impl AppState {
                 MemoryProgressionRepository::default(),
             )),
             queue: QueueStore::default(),
+            friends: Friends::default(),
+            parties: Arc::new(Mutex::new(PartyBook::default())),
             persist_lock: Arc::new(tokio::sync::Mutex::new(())),
             proxy_version: Arc::new(Mutex::new(None)),
         }
@@ -116,6 +124,16 @@ impl AppState {
     }
 
     #[must_use]
+    pub fn with_friends(mut self, friends: Friends) -> Self {
+        self.friends = friends;
+        self
+    }
+
+    pub fn lock_parties(&self) -> MutexGuard<'_, PartyBook> {
+        self.parties.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    #[must_use]
     pub fn with_progression(mut self, service: ProgressionService<ProgressionStore>) -> Self {
         self.progression = service;
         self
@@ -142,6 +160,7 @@ pub enum ApiError {
     Progression(ProgressionError),
     Queue(QueueStoreError),
     Drain(DrainError),
+    Friends(FriendStoreError),
 }
 
 fn unlock_json(unlock: Unlock) -> serde_json::Value {
@@ -232,6 +251,14 @@ impl IntoResponse for ApiError {
                 };
                 return (status, Json(json!({ "error": err.to_string() }))).into_response();
             }
+            Self::Friends(err) => {
+                tracing::warn!(error = %err, "Amis indisponibles");
+                return (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    Json(json!({ "error": "friends_unavailable" })),
+                )
+                    .into_response();
+            }
             Self::Unauthorized => (
                 StatusCode::UNAUTHORIZED,
                 "jeton orchestrateur invalide".to_owned(),
@@ -247,6 +274,12 @@ impl IntoResponse for ApiError {
 impl From<QueueStoreError> for ApiError {
     fn from(value: QueueStoreError) -> Self {
         Self::Queue(value)
+    }
+}
+
+impl From<FriendStoreError> for ApiError {
+    fn from(err: FriendStoreError) -> Self {
+        Self::Friends(err)
     }
 }
 
@@ -327,6 +360,10 @@ pub fn build_router(state: AppState) -> Router {
             "/api/v1/proxy/player-disconnected",
             post(proxy_player_disconnected),
         )
+        .route("/api/v1/players/{uuid}/friends", get(list_friends))
+        .route("/api/v1/friends/{action}", post(friend_action))
+        .route("/api/v1/players/{uuid}/party", get(player_party))
+        .route("/api/v1/parties/{action}", post(party_action))
         .with_state(state)
 }
 
@@ -377,26 +414,83 @@ async fn join_queue(
     if req.player_name.trim().is_empty() {
         return Err(ApiError::BadRequest("player_name vide".to_owned()));
     }
-    let player_uuid = req.player_uuid;
-    let needs_insert = state.lock_games().needs_enqueue(req.game, player_uuid)?;
-    let seq = if needs_insert {
-        Some(
-            state
-                .queue
-                .insert(NewQueueEntry {
-                    player_uuid,
-                    name: &req.player_name,
-                    joined_at: Utc::now(),
-                    seq: None,
-                    game: req.game,
-                    match_size: normalize_match_size(req.game, req.match_size),
-                })
-                .await?,
-        )
-    } else {
-        None
-    };
+    let party = state
+        .lock_parties()
+        .party_of(Instant::now(), req.player_uuid)
+        .filter(|party| party.members.len() > 1);
+    if let Some(party) = party {
+        return join_queue_as_party(&state, req, party).await;
+    }
+    let seq = enqueue_seq(&state, &req).await?;
     let (resp, events) = state.lock_games().join(Instant::now(), req, seq)?;
+    state.flush_queue().await?;
+    state.emit_proxy_events(events);
+    Ok(Json(resp))
+}
+
+async fn enqueue_seq(state: &AppState, req: &JoinQueueRequest) -> Result<Option<u64>, ApiError> {
+    if !state
+        .lock_games()
+        .needs_enqueue(req.game, req.player_uuid)?
+    {
+        return Ok(None);
+    }
+    Ok(Some(
+        state
+            .queue
+            .insert(NewQueueEntry {
+                player_uuid: req.player_uuid,
+                name: &req.player_name,
+                joined_at: Utc::now(),
+                seq: None,
+                game: req.game,
+                match_size: normalize_match_size(req.game, req.match_size),
+            })
+            .await?,
+    ))
+}
+
+async fn join_queue_as_party(
+    state: &AppState,
+    req: JoinQueueRequest,
+    party: Party,
+) -> Result<Json<JoinQueueResponse>, ApiError> {
+    if party.leader.uuid != req.player_uuid {
+        return Ok(Json(JoinQueueResponse {
+            status: hypolia_protocol::QueueJoinStatus::NotPartyLeader,
+            position: 0,
+            total_queued: 0,
+            min_players: 0,
+            target_server: Some(party.leader.name),
+            ready_servers: 0,
+            active_servers: 0,
+            max_servers: 0,
+        }));
+    }
+    let mut members = Vec::with_capacity(party.members.len());
+    let ordered = std::iter::once(party.leader.clone()).chain(
+        party
+            .members
+            .iter()
+            .filter(|member| member.uuid != party.leader.uuid)
+            .cloned(),
+    );
+    for member in ordered {
+        let request = JoinQueueRequest {
+            player_uuid: member.uuid,
+            player_name: member.name.clone(),
+            game: req.game,
+            match_size: req.match_size,
+        };
+        let seq = enqueue_seq(state, &request).await?;
+        members.push((request, seq));
+    }
+    let joined = state
+        .lock_games()
+        .join_party(Instant::now(), req.game, party.id, members)?;
+    let Some((resp, events)) = joined else {
+        return Err(ApiError::BadRequest("groupe vide".to_owned()));
+    };
     state.flush_queue().await?;
     state.emit_proxy_events(events);
     Ok(Json(resp))
@@ -642,4 +736,71 @@ async fn grant_coins(
 ) -> Result<Json<PlayerProfile>, ApiError> {
     check_auth(&headers, state.api_token.as_deref())?;
     Ok(Json(state.progression.grant(uuid, &req).await?))
+}
+
+async fn list_friends(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(uuid): Path<Uuid>,
+) -> Result<Json<FriendsList>, ApiError> {
+    check_auth(&headers, state.api_token.as_deref())?;
+    Ok(Json(state.friends.list(uuid).await?))
+}
+
+async fn friend_action(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(action): Path<String>,
+    Json(req): Json<FriendRequest>,
+) -> Result<Json<FriendOutcome>, ApiError> {
+    check_auth(&headers, state.api_token.as_deref())?;
+    let outcome = match action.as_str() {
+        "add" => state.friends.add(&req).await?,
+        "accept" => state.friends.accept(&req).await?,
+        "deny" => state.friends.deny(&req).await?,
+        "remove" => state.friends.remove(&req).await?,
+        other => return Err(ApiError::NotFound(format!("action inconnue : {other}"))),
+    };
+    Ok(Json(outcome))
+}
+
+async fn player_party(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(uuid): Path<Uuid>,
+) -> Result<Json<Option<Party>>, ApiError> {
+    check_auth(&headers, state.api_token.as_deref())?;
+    Ok(Json(state.lock_parties().party_of(Instant::now(), uuid)))
+}
+
+async fn party_action(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(action): Path<String>,
+    Json(req): Json<PartyRequest>,
+) -> Result<Json<PartyOutcome>, ApiError> {
+    check_auth(&headers, state.api_token.as_deref())?;
+    let now = Instant::now();
+    let target = |req: &PartyRequest| {
+        req.target
+            .clone()
+            .ok_or_else(|| ApiError::BadRequest("target manquant".to_owned()))
+    };
+    let outcome = match action.as_str() {
+        "invite" => {
+            let target = target(&req)?;
+            state.lock_parties().invite(now, req.player, target)
+        }
+        "accept" => {
+            let leader = target(&req)?;
+            state.lock_parties().accept(now, req.player, leader.uuid)
+        }
+        "leave" => state.lock_parties().leave(now, req.player.uuid),
+        "kick" => {
+            let target = target(&req)?;
+            state.lock_parties().kick(now, req.player.uuid, target.uuid)
+        }
+        other => return Err(ApiError::NotFound(format!("action inconnue : {other}"))),
+    };
+    Ok(Json(outcome))
 }

@@ -36,6 +36,7 @@ fn policy() -> FleetPolicy {
         empty_grace: Duration::from_secs(30),
         ending_timeout: Duration::from_secs(60),
         heartbeat_timeout: Duration::from_secs(30),
+        towerwars_gather_delay: Duration::ZERO,
     }
 }
 

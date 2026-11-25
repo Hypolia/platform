@@ -108,6 +108,8 @@ spec:
               value: {{ .Values.orchestrator.towerwars.endingTimeoutSecs | quote }}
             - name: TOWERWARS_HEARTBEAT_TIMEOUT_SECS
               value: {{ .Values.orchestrator.towerwars.heartbeatTimeoutSecs | quote }}
+            - name: TOWERWARS_GATHER_SECS
+              value: {{ .Values.orchestrator.towerwars.gatherSecs | quote }}
             - name: TOWERWARS_CRD_ENABLED
               value: {{ .Values.orchestrator.towerwars.crd.enabled | quote }}
             - name: TOWERWARS_PORT

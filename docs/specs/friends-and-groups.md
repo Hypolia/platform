@@ -22,7 +22,7 @@
 - Amitiés : 100 au plus par joueur, stockées en base (`friendships`, `friend_requests`). On peut ajouter un joueur hors ligne s'il s'est déjà connecté une fois.
 - À la connexion, le joueur voit le nombre d'amis en ligne et ses demandes en attente. Ses amis connectés voient « X s'est connecté », puis « X s'est déconnecté ».
 - Groupe : 4 joueurs au plus, en mémoire dans l'orchestrateur (perdu si l'orchestrateur redémarre). Le chef est celui qui a invité. S'il part, le membre suivant devient chef. À un seul membre, le groupe est dissous. Se déconnecter fait quitter le groupe.
-- File : seul le chef lance une partie. Tout le groupe entre dans la file avec lui, et la file ne sépare jamais un groupe : il attend un serveur avec assez de places. Un membre qui tente de lancer une partie reçoit `NotPartyLeader`. En TowerWars, la taille de la partie monte jusqu'à la taille du groupe.
+- File : seul le chef lance une partie. Tout le groupe entre dans la file avec lui, et la file ne sépare jamais un groupe : il attend un serveur avec assez de places. Un membre qui tente de lancer une partie reçoit `NotPartyLeader`. En TowerWars, le groupe garde le mode du chef (Solo : un joueur par couloir, Duo : deux) et n'est jamais séparé entre deux matchs. Un match Solo compte de 2 à 6 joueurs, un match Duo de 2 à 6 équipes de 2 ; en Duo, un groupe de 2 forme une équipe, les joueurs seuls sont appariés dans l'ordre d'arrivée.
 
 ## API de l'orchestrateur
 

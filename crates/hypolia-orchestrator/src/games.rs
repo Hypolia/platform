@@ -180,6 +180,13 @@ impl Games {
             .find_map(|engine| engine.expected_players(server_id))
     }
 
+    pub fn teams(&self, server_id: &str) -> Vec<Vec<Uuid>> {
+        self.iter()
+            .find(|engine| engine.has_server(server_id))
+            .map(|engine| engine.teams(server_id))
+            .unwrap_or_default()
+    }
+
     pub fn update_server_phase(
         &mut self,
         now: Instant,
@@ -341,6 +348,7 @@ mod tests {
             empty_grace: Duration::from_secs(30),
             ending_timeout: Duration::from_secs(60),
             heartbeat_timeout: Duration::from_secs(30),
+            towerwars_gather_delay: Duration::ZERO,
         }
     }
 
@@ -405,9 +413,13 @@ mod tests {
             .apply_heartbeat(now, beat(ServerKind::TowerWars, "towerwars-1", &[]))
             .unwrap();
 
-        let (first, _) = games.join(now, duo_request(1), None).unwrap();
+        let (first, _) = games
+            .join(now, join_request(1, GameKind::TowerWars), None)
+            .unwrap();
         assert_eq!(first.status, QueueJoinStatus::Queued);
-        let (second, events) = games.join(now, duo_request(2), None).unwrap();
+        let (second, events) = games
+            .join(now, join_request(2, GameKind::TowerWars), None)
+            .unwrap();
         assert_eq!(second.status, QueueJoinStatus::Transferring);
         assert_eq!(second.target_server.as_deref(), Some("towerwars-1"));
         assert_eq!(transfer_target(&events, uid(2)), Some("towerwars-1"));

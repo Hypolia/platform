@@ -19,11 +19,11 @@ pub use store::QueueStore;
 
 pub const FIRST_SEQ: u64 = 1 << 32;
 
-pub const MAX_MATCH_SIZE: u8 = 4;
+pub const MAX_MATCH_SIZE: u8 = 2;
 
 pub const fn normalize_match_size(game: GameKind, raw: u8) -> u8 {
     match game {
-        GameKind::TowerWars if raw >= 1 && raw <= MAX_MATCH_SIZE => raw,
+        GameKind::TowerWars if raw == MAX_MATCH_SIZE => MAX_MATCH_SIZE,
         GameKind::TowerWars => 1,
         GameKind::SheepWars => 0,
     }

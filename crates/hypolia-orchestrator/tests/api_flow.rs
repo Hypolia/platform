@@ -27,6 +27,7 @@ async fn spawn_test_server(token: Option<&str>) -> String {
         empty_grace: Duration::from_secs(30),
         ending_timeout: Duration::from_secs(60),
         heartbeat_timeout: Duration::from_secs(30),
+        towerwars_gather_delay: Duration::ZERO,
     };
     let state = AppState::new(FleetEngine::new(policy), token.map(str::to_owned))
         .with_version(Some("orch-1".to_owned()));

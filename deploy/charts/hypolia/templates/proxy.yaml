@@ -1,0 +1,197 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "hypolia.fullname" . }}-proxy
+  labels:
+    {{- include "hypolia.labels" . | nindent 4 }}
+    app.kubernetes.io/component: proxy
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "hypolia.labels" . | nindent 6 }}
+      app.kubernetes.io/component: proxy
+  template:
+    metadata:
+      labels:
+        {{- include "hypolia.labels" . | nindent 8 }}
+        app.kubernetes.io/component: proxy
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/proxy-configmap.yaml") . | sha256sum }}
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9100"
+        prometheus.io/path: /metrics
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ add (int .Values.proxy.shutdownTimeoutSeconds) 5 }}
+      containers:
+        - name: proxy
+          image: {{ include "hypolia.image" (dict "global" .Values.global "repository" .Values.proxy.image.repository "tag" .Values.proxy.image.tag) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          env:
+            - name: RUST_LOG
+              value: {{ .Values.proxy.logLevel | quote }}
+          ports:
+            - name: minecraft
+              containerPort: 25565
+              protocol: TCP
+            - name: plugins
+              containerPort: 25579
+              protocol: TCP
+            - name: metrics
+              containerPort: 9100
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: metrics
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          {{- with .Values.proxy.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: config
+              mountPath: /etc/rspigot-proxy
+              readOnly: true
+            - name: forwarding-secret
+              mountPath: /etc/hypolia/forwarding
+              readOnly: true
+            - name: plugin-token
+              mountPath: /etc/hypolia/proxy-plugin
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "hypolia.fullname" . }}-proxy
+        - name: forwarding-secret
+          secret:
+            secretName: {{ include "hypolia.forwardingSecretName" . }}
+        - name: plugin-token
+          secret:
+            secretName: {{ include "hypolia.proxyPluginTokenSecretName" . }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "hypolia.fullname" . }}-proxy
+  labels:
+    {{- include "hypolia.labels" . | nindent 4 }}
+    app.kubernetes.io/component: proxy
+  {{- with .Values.proxy.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.proxy.service.type }}
+  selector:
+    {{- include "hypolia.labels" . | nindent 4 }}
+    app.kubernetes.io/component: proxy
+  ports:
+    - name: minecraft
+      port: {{ .Values.proxy.service.port }}
+      targetPort: minecraft
+      protocol: TCP
+      {{- if and (eq .Values.proxy.service.type "NodePort") .Values.proxy.service.nodePort }}
+      nodePort: {{ .Values.proxy.service.nodePort }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "hypolia.fullname" . }}-proxy-internal
+  labels:
+    {{- include "hypolia.labels" . | nindent 4 }}
+    app.kubernetes.io/component: proxy
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "hypolia.labels" . | nindent 4 }}
+    app.kubernetes.io/component: proxy
+  ports:
+    - name: plugins
+      port: 25579
+      targetPort: plugins
+      protocol: TCP
+    - name: metrics
+      port: 9100
+      targetPort: metrics
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "hypolia.fullname" . }}-proxy-plugin
+  labels:
+    {{- include "hypolia.labels" . | nindent 4 }}
+    app.kubernetes.io/component: proxy-plugin
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "hypolia.labels" . | nindent 6 }}
+      app.kubernetes.io/component: proxy-plugin
+  template:
+    metadata:
+      labels:
+        {{- include "hypolia.labels" . | nindent 8 }}
+        app.kubernetes.io/component: proxy-plugin
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: proxy-plugin
+          image: {{ include "hypolia.image" (dict "global" .Values.global "repository" .Values.proxyPlugin.image.repository "tag" .Values.proxyPlugin.image.tag) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          env:
+            - name: RUST_LOG
+              value: {{ .Values.proxyPlugin.logLevel | quote }}
+            - name: RSPIGOT_PROXY_URL
+              value: {{ printf "http://%s-proxy-internal:25579" (include "hypolia.fullname" .) | quote }}
+            - name: RSPIGOT_PROXY_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "hypolia.proxyPluginTokenSecretName" . }}
+                  key: token
+            - name: ORCHESTRATOR_URL
+              value: {{ printf "http://%s-orchestrator:%d" (include "hypolia.fullname" .) (int .Values.orchestrator.port) | quote }}
+            - name: LOBBY_SERVER
+              value: lobby
+            {{- if (include "hypolia.orchestratorTokenSecretName" .) }}
+            - name: ORCHESTRATOR_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "hypolia.orchestratorTokenSecretName" . }}
+                  key: token
+            {{- end }}
+          {{- with .Values.proxyPlugin.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]

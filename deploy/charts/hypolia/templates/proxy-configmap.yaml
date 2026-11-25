@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "hypolia.fullname" . }}-proxy
+  labels:
+    {{- include "hypolia.labels" . | nindent 4 }}
+    app.kubernetes.io/component: proxy
+data:
+  proxy.toml: |
+    bind = "0.0.0.0:25565"
+    online_mode = {{ .Values.proxy.onlineMode }}
+    motd = {{ .Values.proxy.motd | quote }}
+    max_players = {{ int .Values.proxy.maxPlayers }}
+    forwarding_secret_file = "/etc/hypolia/forwarding/secret"
+    compression_threshold = 256
+    compression_level = 6
+    login_timeout_secs = 30
+    connect_timeout_secs = 5
+    shutdown_message = {{ .Values.proxy.shutdownMessage | quote }}
+    shutdown_timeout_secs = {{ int .Values.proxy.shutdownTimeoutSeconds }}
+    try = ["lobby"]
+
+    [servers]
+    lobby = {{ printf "%s-lobby:%d" (include "hypolia.fullname" .) (int .Values.lobby.port) | quote }}
+
+    [plugins]
+    bind = "0.0.0.0:25579"
+    token_file = "/etc/hypolia/proxy-plugin/token"
+    decide_timeout_ms = {{ int .Values.proxy.decideTimeoutMs }}
+
+    [metrics]
+    bind = "0.0.0.0:9100"

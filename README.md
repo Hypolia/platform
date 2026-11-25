@@ -6,21 +6,21 @@ Services communs du réseau Hypolia et déploiement Kubernetes.
 |---|---|---|
 | `hypolia-orchestrator` | Files d'attente, matchmaking, flotte de serveurs de jeu (`kube-rs`), API lobby | [`crates/hypolia-orchestrator`](./crates/hypolia-orchestrator) |
 | `hypolia-progression-pg` | Stockage Postgres de la progression et migrations (`hypolia-migrate`) | [`crates/hypolia-progression-pg`](./crates/hypolia-progression-pg) |
-| `hypolia-velocity` | Plugin Velocity 4.3.1 : routage vers les lobbies et les serveurs de jeu | [`proxy/velocity-plugin`](./proxy/velocity-plugin) |
+| `hypolia-proxy` | Plugin de `rspigot-proxy` : routage vers les lobbies et les parties, transferts, `/hub` et `/server` | [`crates/hypolia-proxy`](./crates/hypolia-proxy) |
 | Chart `hypolia` | Déploiement complet du réseau | [`deploy/charts/hypolia`](./deploy/charts/hypolia) |
 
-Images publiées : `ghcr.io/hypolia/orchestrator`, `ghcr.io/hypolia/velocity`.
+Images publiées : `ghcr.io/hypolia/orchestrator`, `ghcr.io/hypolia/proxy` (`rspigot-proxy`) et `ghcr.io/hypolia/proxy-plugin` (`hypolia-proxy`).
 
-Dépend de [`hypolia/sdk`](https://github.com/hypolia/sdk), cloné dans `../sdk` et figé par `sdk.ref`.
+Dépend de [`hypolia/sdk`](https://github.com/hypolia/sdk), cloné dans `../sdk` et figé par `sdk.ref`, et de [`ferrislabs/rspigot`](https://github.com/ferrislabs/rspigot), cloné dans `/opt/minecraft/dev/rspigot` et figé par `rspigot.ref`.
 
-## Proxy Velocity en local (`:25565`)
+## Proxy en local (`:25565`)
 
 ```bash
-./proxy/download-velocity.sh
-./proxy/run.sh
+./deploy/local/run-proxy.sh
+cargo run -p hypolia-proxy
 ```
 
-`download-velocity.sh` écrit le secret de forwarding dans `../lobby/server`, `../sheepwars/server` et `../towerwars/server`.
+Le premier lance `rspigot-proxy` avec [`deploy/local/proxy/proxy.toml`](./deploy/local/proxy/proxy.toml). Il crée le secret de forwarding et le recopie dans `../lobby/server`, `../sheepwars/server` et `../towerwars/server`. Le second branche le plugin Hypolia sur le proxy et sur l'orchestrateur (`ORCHESTRATOR_URL`, par défaut `http://127.0.0.1:8080`).
 
 ## Construire les images
 
@@ -30,7 +30,7 @@ docker buildx bake
 
 ## Déployer via Helm
 
-Chaque image a son propre tag. Le chart les lit dans `velocity.image.tag`, `orchestrator.image.tag`, `lobby.pluginImage.tag`, `lobby.rspigotImage.tag`, `sheepwars.pluginSidecar.image.tag`, `sheepwars.rspigotImage.tag`, `towerwars.pluginSidecar.image.tag` et `towerwars.rspigotImage.tag`. Un tag vide retombe sur `global.imageTag`.
+Chaque image a son propre tag. Le chart les lit dans `proxy.image.tag`, `proxyPlugin.image.tag`, `orchestrator.image.tag`, `lobby.pluginImage.tag`, `lobby.rspigotImage.tag`, `sheepwars.pluginSidecar.image.tag`, `sheepwars.rspigotImage.tag`, `towerwars.pluginSidecar.image.tag` et `towerwars.rspigotImage.tag`. Un tag vide retombe sur `global.imageTag`.
 
 ```bash
 helm upgrade --install hypolia ./deploy/charts/hypolia \
@@ -66,6 +66,6 @@ En k3d, un serveur RustFS est déployé dans le cluster.
 
 ## Documentation
 
-- [`docs/adr`](./docs/adr) : décisions d'architecture
+- [`docs/adr`](./docs/adr) : décisions d'architecture, dont le passage à `rspigot-proxy` ([ADR 0012](./docs/adr/0012-rspigot-proxy-remplace-velocity.md))
 - [`docs/glossary.md`](./docs/glossary.md)
 - [`docs/specs`](./docs/specs)

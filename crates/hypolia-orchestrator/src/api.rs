@@ -563,7 +563,7 @@ async fn ack_transfer(
 ) -> Result<StatusCode, ApiError> {
     check_auth(&headers, state.api_token.as_deref())?;
     if !req.success {
-        tracing::warn!(%transfer_id, message = ?req.message, "Transfert Velocity échoué");
+        tracing::warn!(%transfer_id, message = ?req.message, "Transfert proxy échoué");
     }
     state
         .lock_games()

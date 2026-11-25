@@ -13,6 +13,8 @@ hypolia-progression = { path = "../sdk/crates/hypolia-progression" }
 hypolia-progression-pg = { path = "crates/hypolia-progression-pg" }
 hypolia-protocol = { path = "../sdk/crates/hypolia-protocol" }
 
+rspigot-proxy-plugin = { path = "/opt/minecraft/dev/rspigot/crates/rspigot-proxy-plugin" }
+
 axum = "0.8"
 chrono = "0.4"
 dotenvy = "0.15"

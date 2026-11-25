@@ -1,0 +1,25 @@
+bind = "0.0.0.0:25565"
+online_mode = true
+motd = "§6§lHypolia §8• §dMini-Jeux & SheepWars §7(local)"
+max_players = 100
+forwarding_secret_file = "forwarding.secret"
+compression_threshold = 256
+compression_level = 6
+login_timeout_secs = 30
+connect_timeout_secs = 5
+shutdown_message = "§eLe proxy redémarre."
+shutdown_timeout_secs = 5
+try = ["lobby"]
+
+[servers]
+lobby = "127.0.0.1:25566"
+sheepwars = "127.0.0.1:25567"
+towerwars = "127.0.0.1:25568"
+
+[plugins]
+bind = "127.0.0.1:25579"
+token_file = ""
+decide_timeout_ms = 1000
+
+[metrics]
+bind = "127.0.0.1:9100"

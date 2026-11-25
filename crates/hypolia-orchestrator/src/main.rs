@@ -8,6 +8,7 @@ use hypolia_orchestrator::progression::{ProgressionService, ProgressionStore};
 use hypolia_orchestrator::queue::{
     MemoryQueueRepository, PgQueueRepository, QueueStore, restore_games,
 };
+use hypolia_orchestrator::social::{Friends, PgFriendStore};
 use hypolia_orchestrator::static_backend::run_static_reconcile_loop;
 use hypolia_progression::MemoryProgressionRepository;
 use hypolia_progression_pg::PgProgressionRepository;
@@ -63,7 +64,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             ProgressionStore::Memory(MemoryProgressionRepository::default())
         }
     };
+    let friends = match config.progression_database_url.as_deref() {
+        Some(url) => match PgFriendStore::connect(url).await {
+            Ok(store) => Friends::Postgres(store),
+            Err(err) => {
+                tracing::error!(error = %err, "connexion à la base des amis impossible");
+                std::process::exit(1);
+            }
+        },
+        None => {
+            tracing::warn!("amis en mémoire, perdus au redémarrage");
+            Friends::default()
+        }
+    };
     let state = AppState::from_games(games, config.api_token.clone())
+        .with_friends(friends)
         .with_queue(queue_store)
         .with_version(config.version.clone())
         .with_progression(ProgressionService::new(store));

@@ -1,6 +1,7 @@
 mod lobbies;
 mod network;
 mod orchestrator;
+mod social;
 
 use std::time::Duration;
 

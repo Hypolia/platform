@@ -20,4 +20,3 @@ target
 /server/banned-players.json
 /server/ops.json
 /server/whitelist.json
-/proxy/velocity-plugin/target

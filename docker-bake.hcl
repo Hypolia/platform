@@ -14,6 +14,14 @@ variable "SDK_DIR" {
   default = "../sdk"
 }
 
+variable "RSPIGOT_DIR" {
+  default = "/opt/minecraft/dev/rspigot"
+}
+
+variable "RSPIGOT_REF" {
+  default = "local"
+}
+
 function "image_tags" {
   params = [name]
   result = concat(
@@ -23,17 +31,19 @@ function "image_tags" {
 }
 
 group "default" {
-  targets = ["orchestrator", "velocity"]
+  targets = ["orchestrator", "proxy", "proxy-plugin"]
 }
 
 target "_common" {
   dockerfile = "Dockerfile"
   context    = "."
   contexts = {
-    sdk-src = SDK_DIR
+    sdk-src     = SDK_DIR
+    rspigot-src = RSPIGOT_DIR
   }
   args = {
     HYPOLIA_VERSION = EXTRA_TAG != "" ? EXTRA_TAG : IMAGE_TAG
+    RSPIGOT_REF     = RSPIGOT_REF
   }
 }
 
@@ -43,8 +53,14 @@ target "orchestrator" {
   tags     = image_tags("orchestrator")
 }
 
-target "velocity" {
+target "proxy" {
   inherits = ["_common"]
-  target   = "velocity"
-  tags     = image_tags("velocity")
+  target   = "proxy"
+  tags     = image_tags("proxy")
+}
+
+target "proxy-plugin" {
+  inherits = ["_common"]
+  target   = "proxy-plugin"
+  tags     = image_tags("proxy-plugin")
 }

@@ -3,7 +3,7 @@ global:
   imageTag: dev
   imagePullPolicy: IfNotPresent
 
-velocity:
+proxy:
   onlineMode: false
   service:
     type: LoadBalancer

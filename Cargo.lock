@@ -1252,6 +1252,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "hypolia-proxy"
+version = "0.1.0"
+dependencies = [
+ "futures-util",
+ "hypolia-protocol",
+ "reqwest",
+ "rspigot-proxy-plugin",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
 name = "iana-time-zone"
 version = "0.1.65"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2562,6 +2578,27 @@ dependencies = [
  "spki",
  "subtle",
  "zeroize",
+]
+
+[[package]]
+name = "rspigot-plugin-protocol"
+version = "0.1.1"
+dependencies = [
+ "prost",
+ "tonic",
+ "tonic-prost",
+]
+
+[[package]]
+name = "rspigot-proxy-plugin"
+version = "0.1.1"
+dependencies = [
+ "rspigot-plugin-protocol",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-stream",
+ "tonic",
+ "tracing",
 ]
 
 [[package]]
@@ -4304,7 +4341,3 @@ name = "zmij"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
-
-[[patch.unused]]
-name = "creusot-std"
-version = "0.15.0-dev"

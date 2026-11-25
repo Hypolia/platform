@@ -3,11 +3,5 @@
 *.bak
 .DS_Store
 
-# Proxy Velocity (binaire JAR, secret HMAC et logs)
-/proxy/velocity.jar
-/proxy/forwarding.secret
-/proxy/logs/
-/proxy/plugins/
-/proxy/lang/
-/proxy/.console_history
-/proxy/velocity-plugin/target/
+# Proxy local (secret de forwarding)
+/deploy/local/proxy/forwarding.secret

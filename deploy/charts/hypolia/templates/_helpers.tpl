@@ -24,6 +24,14 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end -}}
 {{- end -}}
 
+{{- define "hypolia.proxyPluginTokenSecretName" -}}
+{{- if .Values.secrets.existingProxyPluginTokenSecret -}}
+{{- .Values.secrets.existingProxyPluginTokenSecret -}}
+{{- else -}}
+{{- printf "%s-proxy-plugin-token" (include "hypolia.fullname" .) -}}
+{{- end -}}
+{{- end -}}
+
 {{- define "hypolia.orchestratorTokenSecretName" -}}
 {{- if .Values.secrets.existingOrchestratorTokenSecret -}}
 {{- .Values.secrets.existingOrchestratorTokenSecret -}}

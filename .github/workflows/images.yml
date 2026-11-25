@@ -31,6 +31,7 @@ jobs:
         id: refs
         run: |
           echo "sdk=$(tr -d '[:space:]' < platform/sdk.ref)" >> "$GITHUB_OUTPUT"
+          echo "rspigot=$(tr -d '[:space:]' < platform/rspigot.ref)" >> "$GITHUB_OUTPUT"
 
       - name: Checkout sdk
         uses: actions/checkout@v4
@@ -38,6 +39,13 @@ jobs:
           repository: hypolia/sdk
           ref: ${{ steps.refs.outputs.sdk }}
           path: sdk
+
+      - name: Checkout rspigot
+        uses: actions/checkout@v4
+        with:
+          repository: ferrislabs/rspigot
+          ref: ${{ steps.refs.outputs.rspigot }}
+          path: rspigot
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -58,6 +66,7 @@ jobs:
           files: docker-bake.hcl
           allow: |
             fs.read=${{ github.workspace }}/sdk
+            fs.read=${{ github.workspace }}/rspigot
           push: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
           set: |
             *.cache-from=type=gha,scope=platform-${{ runner.arch }}
@@ -67,6 +76,8 @@ jobs:
           IMAGE_TAG: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'latest' }}
           EXTRA_TAG: ${{ github.event_name == 'pull_request' && format('pr-{0}-{1}', github.event.pull_request.number, github.event.pull_request.head.sha) || github.sha }}
           SDK_DIR: ${{ github.workspace }}/sdk
+          RSPIGOT_DIR: ${{ github.workspace }}/rspigot
+          RSPIGOT_REF: ${{ steps.refs.outputs.rspigot }}
 
   # Deploys: writes this commit into hypolia/infra, Argo CD does the rest.
   # Runs once every image is pushed, only for main.
@@ -91,10 +102,10 @@ jobs:
         env:
           SHA: ${{ github.sha }}
         run: |
-          yq -i '.velocity.image.tag = strenv(SHA) | .orchestrator.image.tag = strenv(SHA)' apps/hypolia/images.yaml
+          yq -i '.proxy.image.tag = strenv(SHA) | .proxyPlugin.image.tag = strenv(SHA) | .orchestrator.image.tag = strenv(SHA)' apps/hypolia/images.yaml
           yq -i '(.spec.sources[] | select(.repoURL == "https://github.com/hypolia/platform") | .targetRevision) = strenv(SHA)' argocd/hypolia.yaml
           grep -q "targetRevision: ${SHA}" argocd/hypolia.yaml
-          test "$(grep -c "tag: ${SHA}" apps/hypolia/images.yaml)" -ge 2
+          test "$(grep -c "tag: ${SHA}" apps/hypolia/images.yaml)" -ge 3
 
       - name: Commit and push
         env:

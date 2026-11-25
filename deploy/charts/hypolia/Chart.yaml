@@ -1,6 +1,6 @@
 apiVersion: v2
 name: hypolia
-description: Réseau Minecraft Hypolia (Velocity, Lobby FerrisKey/Capitainerie, Orchestrateur & pool dynamique de k serveurs SheepWars)
+description: Réseau Minecraft Hypolia (rspigot-proxy, Lobby FerrisKey/Capitainerie, Orchestrateur & pool dynamique de k serveurs SheepWars)
 type: application
 version: 0.1.0
 appVersion: "0.1.0"

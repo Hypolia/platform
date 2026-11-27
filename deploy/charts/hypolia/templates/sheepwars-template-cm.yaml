@@ -72,6 +72,8 @@ data:
               value: {{ printf "127.0.0.1:%d" (int .Values.sheepwars.grpcPort) | quote }}
             - name: SHEEPWARS_MAX_PLAYERS
               value: {{ .Values.orchestrator.sheepwars.maxPlayers | quote }}
+            - name: RUST_LOG
+              value: {{ .Values.sheepwars.logLevel | quote }}
           ports:
             - name: minecraft
               containerPort: {{ .Values.sheepwars.port }}

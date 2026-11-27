@@ -13,7 +13,7 @@ data:
     max_players = {{ int .Values.proxy.maxPlayers }}
     forwarding_secret_file = "/etc/hypolia/forwarding/secret"
     compression_threshold = 256
-    compression_level = 6
+    compression_level = 1
     login_timeout_secs = 30
     connect_timeout_secs = 5
     shutdown_message = {{ .Values.proxy.shutdownMessage | quote }}

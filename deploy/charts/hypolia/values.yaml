@@ -180,6 +180,9 @@ sheepwars:
     tag: ""
   port: 25565
   grpcPort: 25581
+  # Filtre tracing du serveur rspigot. tick_profile en debug écrit chaque tick
+  # au-dessus de 50 ms avec ses passes les plus lourdes, et un résumé tous les 100 ticks.
+  logLevel: "info,rspigot_core::tick_profile=debug"
   resources:
     rspigot:
       requests:

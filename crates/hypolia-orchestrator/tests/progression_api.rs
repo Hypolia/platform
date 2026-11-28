@@ -572,3 +572,91 @@ async fn ledger_sum_equals_the_balance() {
     assert_eq!(sum, i128::from(balance));
     assert_eq!(balance, 60);
 }
+
+impl Harness {
+    async fn leaderboard(&self, game: &str, query: &str) -> Response {
+        self.client
+            .get(self.url(&format!("/api/v1/leaderboards/{game}{query}")))
+            .send()
+            .await
+            .unwrap()
+    }
+
+    async fn seed_winner(&self, index: u128, wins: u32) {
+        self.state
+            .progression
+            .repository()
+            .update(Uuid::from_u128(index), |progress| {
+                progress.set_identity(&format!("P{index}"), PlayerRank::Member);
+                for _ in 0..wins {
+                    let _ =
+                        progress.record_match(Uuid::nil(), GameKind::SheepWars, MatchOutcome::Win);
+                }
+                Ok::<_, ()>(((), Vec::new()))
+            })
+            .await
+            .unwrap()
+            .unwrap();
+    }
+}
+
+#[tokio::test]
+async fn leaderboard_is_empty_before_any_win() {
+    let h = harness(None).await;
+    let (status, board) = body(h.leaderboard("sheepwars", "").await).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(board, json!({ "game": "sheep_wars", "entries": [] }));
+}
+
+#[tokio::test]
+async fn leaderboard_lists_match_winners_best_first() {
+    let h = harness(None).await;
+    let (a, b) = (Uuid::new_v4(), Uuid::new_v4());
+    h.heartbeat(&[a, b]).await;
+    h.ack(&duel(Uuid::new_v4(), a, b)).await;
+    let resp = h.leaderboard("sheepwars", "?limit=10").await;
+    assert_eq!(resp.status(), StatusCode::OK);
+    let board: hypolia_protocol::Leaderboard = resp.json().await.unwrap();
+    assert_eq!(board.game, GameKind::SheepWars);
+    assert_eq!(board.entries.len(), 1);
+    assert_eq!(
+        (board.entries[0].rank, board.entries[0].name.as_str()),
+        (1, "Alice")
+    );
+    assert_eq!((board.entries[0].wins, board.entries[0].played), (1, 1));
+    let (_, tower) = body(h.leaderboard("towerwars", "").await).await;
+    assert_eq!(tower["entries"], json!([]));
+}
+
+#[tokio::test]
+async fn leaderboard_defaults_to_ten_and_caps_at_fifty() {
+    let h = harness(None).await;
+    for index in 1..=60 {
+        h.seed_winner(index, 1).await;
+    }
+    let len = |value: Value| value["entries"].as_array().unwrap().len();
+    let (_, default) = body(h.leaderboard("sheepwars", "").await).await;
+    let (_, big) = body(h.leaderboard("sheepwars", "?limit=500").await).await;
+    let (_, small) = body(h.leaderboard("sheepwars", "?limit=3").await).await;
+    assert_eq!((len(default), len(big), len(small)), (10, 50, 3));
+}
+
+#[tokio::test]
+async fn leaderboard_rejects_unknown_games_and_bad_tokens() {
+    let h = harness(Some("secret")).await;
+    assert_eq!(
+        h.leaderboard("sheepwars", "").await.status(),
+        StatusCode::UNAUTHORIZED
+    );
+    let authed = |game: &'static str| {
+        h.client
+            .get(h.url(&format!("/api/v1/leaderboards/{game}")))
+            .bearer_auth("secret")
+            .send()
+    };
+    assert_eq!(authed("sheepwars").await.unwrap().status(), StatusCode::OK);
+    assert_eq!(
+        authed("lobby").await.unwrap().status(),
+        StatusCode::NOT_FOUND
+    );
+}

@@ -5,7 +5,9 @@ use hypolia_progression::{
     CoinDelta, CoinMovement, CoinReason, Coins, GameRecord, MatchToSettle, PlayerProgress,
     PlayerRecord, ProgressionRepository, ProgressionStoreError, Settlement, Xp,
 };
-use hypolia_protocol::{CosmeticId, CosmeticSlot, GameKind, MatchReportAck, PlayerRank};
+use hypolia_protocol::{
+    CosmeticId, CosmeticSlot, GameKind, LeaderboardEntry, MatchReportAck, PlayerRank,
+};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use sqlx::postgres::PgPoolOptions;
@@ -388,6 +390,37 @@ impl ProgressionRepository for PgProgressionRepository {
             .map_err(store)?;
         tx.commit().await.map_err(store)?;
         Ok(ack)
+    }
+
+    async fn top_wins(
+        &self,
+        game: GameKind,
+        limit: u32,
+    ) -> Result<Vec<LeaderboardEntry>, ProgressionStoreError> {
+        let rows = sqlx::query(
+            "SELECT p.name, g.wins, g.played FROM game_progress g \
+             JOIN players p ON p.uuid = g.uuid \
+             WHERE g.game = $1 AND g.wins > 0 \
+             ORDER BY g.wins DESC, g.played ASC, p.name ASC \
+             LIMIT $2",
+        )
+        .bind(encode(&game)?)
+        .bind(i64::from(limit))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(store)?;
+
+        let mut entries = Vec::with_capacity(rows.len());
+        for (index, row) in rows.into_iter().enumerate() {
+            entries.push(LeaderboardEntry {
+                rank: u32::try_from(index + 1)
+                    .map_err(|_| corrupted("classement", "trop de lignes"))?,
+                name: row.try_get("name").map_err(store)?,
+                wins: from_i32(row.try_get("wins").map_err(store)?, "victoires")?,
+                played: from_i32(row.try_get("played").map_err(store)?, "parties")?,
+            });
+        }
+        Ok(entries)
     }
 
     async fn ledger(&self, uuid: Uuid) -> Result<Vec<CoinMovement>, ProgressionStoreError> {

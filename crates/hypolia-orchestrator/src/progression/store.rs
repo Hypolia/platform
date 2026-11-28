@@ -5,7 +5,7 @@ use hypolia_progression::{
     ProgressionRepository, ProgressionStoreError, Settlement,
 };
 use hypolia_progression_pg::PgProgressionRepository;
-use hypolia_protocol::MatchReportAck;
+use hypolia_protocol::{GameKind, LeaderboardEntry, MatchReportAck};
 use uuid::Uuid;
 
 #[derive(Clone)]
@@ -56,6 +56,17 @@ impl ProgressionRepository for ProgressionStore {
         match self {
             Self::Memory(repo) => repo.ledger(uuid).await,
             Self::Postgres(repo) => repo.ledger(uuid).await,
+        }
+    }
+
+    async fn top_wins(
+        &self,
+        game: GameKind,
+        limit: u32,
+    ) -> Result<Vec<LeaderboardEntry>, ProgressionStoreError> {
+        match self {
+            Self::Memory(repo) => repo.top_wins(game, limit).await,
+            Self::Postgres(repo) => repo.top_wins(game, limit).await,
         }
     }
 }

@@ -47,9 +47,14 @@ async fn sync_map() -> Result<(), Box<dyn std::error::Error>> {
     };
     let client = S3Client::new(s3_cfg)?;
 
-    let requested = ["SHEEPWARS_MAP_NAME", "SHEEPWARS_MAP", "TOWERWARS_MAP_NAME"]
-        .into_iter()
-        .find_map(non_empty_env);
+    let requested = [
+        "SHEEPWARS_MAP_NAME",
+        "SHEEPWARS_MAP",
+        "TOWERWARS_MAP_NAME",
+        "DEACOUDRE_MAP_NAME",
+    ]
+    .into_iter()
+    .find_map(non_empty_env);
     let map_name = match requested {
         Some(name) => name,
         None => {

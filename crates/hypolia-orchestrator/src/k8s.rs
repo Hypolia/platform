@@ -21,7 +21,7 @@ use crate::crd::{
 };
 use crate::engine::{FleetEngine, ServerDeletion};
 
-use crate::s3::{MapCatalog, S3Client, hex_lower, sanitize_k8s_label};
+use crate::s3::{MapCatalog, S3Client, S3Config, hex_lower, sanitize_k8s_label};
 
 pub const TEMPLATE_HASH_LABEL: &str = "hypolia.io/template-hash";
 const TEMPLATE_HASH_LEN: usize = 12;
@@ -358,11 +358,16 @@ async fn run_game_reconcile_loop<K: GameServerObject>(
         .s3
         .as_ref()
         .filter(|_| spec.s3_maps)
-        .and_then(|s3_cfg| match S3Client::new(s3_cfg.clone()) {
-            Ok(client) => Some(MapDiscoveryState::new(client)),
-            Err(err) => {
-                tracing::error!(%err, "Configuration endpoint S3 invalide");
-                None
+        .and_then(|s3_cfg| {
+            match S3Client::new(S3Config {
+                prefix: spec.maps_prefix(),
+                ..s3_cfg.clone()
+            }) {
+                Ok(client) => Some(MapDiscoveryState::new(client)),
+                Err(err) => {
+                    tracing::error!(%err, "Configuration endpoint S3 invalide");
+                    None
+                }
             }
         });
 
@@ -763,6 +768,38 @@ mod tests {
             .iter()
             .find(|e| e.name == name)
             .and_then(|e| e.value.as_deref())
+    }
+
+    #[test]
+    fn build_deacoudre_pod_hands_its_map_to_map_sync() {
+        let template = PodTemplateSpec {
+            metadata: None,
+            spec: Some(PodSpec {
+                init_containers: Some(vec![Container {
+                    name: "map-sync".to_owned(),
+                    ..Default::default()
+                }]),
+                containers: vec![Container {
+                    name: "rspigot".to_owned(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }),
+        };
+        let config = test_config();
+        let dac = config.deacoudre.as_ref().unwrap();
+        let pod = build_pod(
+            "deacoudre-abc123",
+            &config,
+            dac,
+            Some(&template),
+            Some("amphitheatre"),
+        );
+        let spec = pod.spec.as_ref().unwrap();
+        let sync = &spec.init_containers.as_ref().unwrap()[0];
+        assert_eq!(env_of(sync, "DEACOUDRE_MAP_NAME"), Some("amphitheatre"));
+        let labels = pod.metadata.labels.as_ref().unwrap();
+        assert_eq!(labels.get("hypolia.io/map").unwrap(), "amphitheatre");
     }
 
     #[test]

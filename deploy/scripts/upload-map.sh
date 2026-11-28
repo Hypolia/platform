@@ -5,14 +5,14 @@ if [[ $# -lt 3 || $# -gt 4 ]]; then
   echo "Usage :" >&2
   echo "  $0 <jeu> <nom-map> <dossier-map>" >&2
   echo "  $0 <jeu> <nom-map> <world.zip> <arena.json>" >&2
-  echo "<jeu> : sheepwars ou towerwars. La map va sous s3://<bucket>/<jeu>/<nom-map>/." >&2
+  echo "<jeu> : sheepwars, towerwars ou deacoudre. La map va sous s3://<bucket>/<jeu>/<nom-map>/." >&2
   exit 1
 fi
 
 GAME="$1"
 case "${GAME}" in
-  sheepwars|towerwars) ;;
-  *) echo "Erreur : jeu inconnu (${GAME}), attendu sheepwars ou towerwars." >&2; exit 1 ;;
+  sheepwars|towerwars|deacoudre) ;;
+  *) echo "Erreur : jeu inconnu (${GAME}), attendu sheepwars, towerwars ou deacoudre." >&2; exit 1 ;;
 esac
 shift
 MAP_NAME="$1"

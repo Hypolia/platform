@@ -42,10 +42,14 @@ pub const DEACOUDRE: GameSpec = GameSpec {
     display_name: "Dé à coudre",
     default_image: "ghcr.io/hypolia/deacoudre:latest",
     default_max_players: 8,
-    s3_maps: false,
+    s3_maps: true,
 };
 
 impl GameSpec {
+    pub fn maps_prefix(&self) -> String {
+        format!("{}/", self.component)
+    }
+
     pub const fn of(game: GameKind) -> &'static Self {
         match game {
             GameKind::SheepWars => &SHEEPWARS,
@@ -88,7 +92,8 @@ mod tests {
         assert_eq!(spec.env_name("MAX_PLAYERS"), "DEACOUDRE_MAX_PLAYERS");
         assert_eq!(spec.default_max_players, 8);
         assert_eq!(spec.default_image, "ghcr.io/hypolia/deacoudre:latest");
-        assert!(!spec.s3_maps);
+        assert!(spec.s3_maps);
+        assert_eq!(spec.maps_prefix(), "deacoudre/");
         assert_eq!(
             spec.pod_selector(),
             "app.kubernetes.io/component=deacoudre,app.kubernetes.io/managed-by=hypolia-orchestrator"

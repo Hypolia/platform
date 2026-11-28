@@ -15,10 +15,10 @@ use hypolia_progression::{
 };
 use hypolia_protocol::{
     AdminCoinGrant, DrainResponse, EquipRequest, FleetStatusSnapshot, GameKind, HeartbeatRequest,
-    HeartbeatResponse, JoinQueueRequest, JoinQueueResponse, LeaveQueueRequest, LeaveQueueResponse,
-    MatchReport, MatchReportAck, PROXY_VERSION_HEADER, PhaseUpdateRequest, PlayerIdentityUpdate,
-    PlayerProfile, PlayerQueueStatus, ProxyDisconnectRequest, ProxyEvent, ProxyStateSnapshot,
-    PurchaseRequest, SendToLobbyRequest, SpectateRequest, TransferAckRequest,
+    HeartbeatResponse, JoinQueueRequest, JoinQueueResponse, Leaderboard, LeaveQueueRequest,
+    LeaveQueueResponse, MatchReport, MatchReportAck, PROXY_VERSION_HEADER, PhaseUpdateRequest,
+    PlayerIdentityUpdate, PlayerProfile, PlayerQueueStatus, ProxyDisconnectRequest, ProxyEvent,
+    ProxyStateSnapshot, PurchaseRequest, SendToLobbyRequest, SpectateRequest, TransferAckRequest,
 };
 use serde::Deserialize;
 use serde_json::json;
@@ -346,6 +346,7 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/api/v1/matches", post(report_match))
         .route("/api/v1/players/{uuid}/profile", get(player_profile))
+        .route("/api/v1/leaderboards/{game}", get(leaderboard))
         .route("/api/v1/players/{uuid}/identity", post(set_identity))
         .route("/api/v1/players/{uuid}/purchases", post(purchase_cosmetic))
         .route("/api/v1/players/{uuid}/equipped", put(equip_cosmetic))
@@ -700,6 +701,30 @@ async fn player_profile(
 ) -> Result<Json<PlayerProfile>, ApiError> {
     check_auth(&headers, state.api_token.as_deref())?;
     Ok(Json(state.progression.profile(uuid).await?))
+}
+
+const LEADERBOARD_DEFAULT_LIMIT: u32 = 10;
+const LEADERBOARD_MAX_LIMIT: u32 = 50;
+
+#[derive(Debug, Deserialize)]
+struct LeaderboardQuery {
+    limit: Option<u32>,
+}
+
+async fn leaderboard(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(game): Path<String>,
+    Query(query): Query<LeaderboardQuery>,
+) -> Result<Json<Leaderboard>, ApiError> {
+    check_auth(&headers, state.api_token.as_deref())?;
+    let game = GameKind::from_slug(&game)
+        .ok_or_else(|| ApiError::NotFound(format!("jeu inconnu : {game}")))?;
+    let limit = query
+        .limit
+        .unwrap_or(LEADERBOARD_DEFAULT_LIMIT)
+        .min(LEADERBOARD_MAX_LIMIT);
+    Ok(Json(state.progression.leaderboard(game, limit).await?))
 }
 
 async fn set_identity(

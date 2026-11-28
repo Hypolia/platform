@@ -30,6 +30,12 @@ async fn postgres_passes_the_contract() {
 }
 
 #[tokio::test]
+async fn postgres_passes_the_leaderboard_contract() {
+    let (_container, url) = start().await;
+    common::leaderboard_contract(repository(&url).await).await;
+}
+
+#[tokio::test]
 async fn migrate_is_idempotent_and_balance_check_rejects_negatives() {
     let (_container, url) = start().await;
     let repo = repository(&url).await;

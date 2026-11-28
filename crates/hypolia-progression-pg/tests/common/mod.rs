@@ -208,3 +208,69 @@ pub async fn contract<R: ProgressionRepository>(repo: R) {
     assert_eq!(alex_after.games[&GameKind::SheepWars].xp, Xp(150));
     assert_eq!(alex_after.coins, Coins(560));
 }
+
+async fn record(
+    repo: &impl ProgressionRepository,
+    uuid: Uuid,
+    name: &str,
+    game: GameKind,
+    wins: u32,
+    losses: u32,
+) {
+    repo.update(uuid, |progress| {
+        progress.set_identity(name, PlayerRank::Member);
+        let id = Uuid::from_u128(0x1000);
+        for _ in 0..wins {
+            let _ = progress.record_match(id, game, MatchOutcome::Win);
+        }
+        for _ in 0..losses {
+            let _ = progress.record_match(id, game, MatchOutcome::Loss);
+        }
+        Ok::<_, UnlockError>(((), Vec::new()))
+    })
+    .await
+    .unwrap()
+    .unwrap();
+}
+
+pub async fn leaderboard_contract<R: ProgressionRepository>(repo: R) {
+    let sheep = GameKind::SheepWars;
+    assert!(repo.top_wins(sheep, 10).await.unwrap().is_empty());
+
+    record(&repo, Uuid::from_u128(1), "Zoe", sheep, 5, 0).await;
+    record(&repo, Uuid::from_u128(2), "Bob", sheep, 5, 3).await;
+    record(&repo, Uuid::from_u128(3), "Alice", sheep, 5, 0).await;
+    record(&repo, Uuid::from_u128(4), "Max", sheep, 9, 9).await;
+    record(&repo, Uuid::from_u128(5), "Never", sheep, 0, 4).await;
+    record(
+        &repo,
+        Uuid::from_u128(6),
+        "Tower",
+        GameKind::TowerWars,
+        2,
+        0,
+    )
+    .await;
+
+    let top = repo.top_wins(sheep, 10).await.unwrap();
+    let rows: Vec<(u32, &str, u32, u32)> = top
+        .iter()
+        .map(|e| (e.rank, e.name.as_str(), e.wins, e.played))
+        .collect();
+    assert_eq!(
+        rows,
+        vec![
+            (1, "Max", 9, 18),
+            (2, "Alice", 5, 5),
+            (3, "Zoe", 5, 5),
+            (4, "Bob", 5, 8),
+        ]
+    );
+
+    let top_two = repo.top_wins(sheep, 2).await.unwrap();
+    assert_eq!(top_two, top[..2].to_vec());
+
+    let tower = repo.top_wins(GameKind::TowerWars, 10).await.unwrap();
+    assert_eq!(tower.len(), 1);
+    assert_eq!(tower[0].name, "Tower");
+}

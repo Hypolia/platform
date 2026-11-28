@@ -6,8 +6,8 @@ use hypolia_progression::{
     ProgressionRepository, ProgressionStoreError, Settlement, UnlockError, count_match,
 };
 use hypolia_protocol::{
-    AdminCoinGrant, CosmeticId, EquipRequest, MatchReport, MatchReportAck, PlayerIdentityUpdate,
-    PlayerProfile,
+    AdminCoinGrant, CosmeticId, EquipRequest, GameKind, Leaderboard, MatchReport, MatchReportAck,
+    PlayerIdentityUpdate, PlayerProfile,
 };
 use uuid::Uuid;
 
@@ -145,6 +145,17 @@ impl<R: ProgressionRepository> ProgressionService<R> {
             .await?
             .map_or_else(|| PlayerProgress::new(uuid), PlayerProgress::from);
         Ok(PlayerProfile::from(&progress))
+    }
+
+    pub async fn leaderboard(
+        &self,
+        game: GameKind,
+        limit: u32,
+    ) -> Result<Leaderboard, ProgressionError> {
+        Ok(Leaderboard {
+            game,
+            entries: self.repo.top_wins(game, limit).await?,
+        })
     }
 
     pub async fn set_identity(

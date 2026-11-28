@@ -18,6 +18,8 @@ env:
 jobs:
   images:
     runs-on: ubuntu-latest
+    outputs:
+      rspigot: ${{ steps.refs.outputs.rspigot }}
     permissions:
       contents: read
       packages: write
@@ -101,11 +103,13 @@ jobs:
       - name: Bump platform
         env:
           SHA: ${{ github.sha }}
+          RSPIGOT_REF: ${{ needs.images.outputs.rspigot }}
         run: |
-          yq -i '.proxy.image.tag = strenv(SHA) | .proxyPlugin.image.tag = strenv(SHA) | .orchestrator.image.tag = strenv(SHA)' apps/hypolia/images.yaml
+          yq -i '.proxy.image.tag = strenv(RSPIGOT_REF) | .proxyPlugin.image.tag = strenv(SHA) | .orchestrator.image.tag = strenv(SHA)' apps/hypolia/images.yaml
           yq -i '(.spec.sources[] | select(.repoURL == "https://github.com/hypolia/platform") | .targetRevision) = strenv(SHA)' argocd/hypolia.yaml
           grep -q "targetRevision: ${SHA}" argocd/hypolia.yaml
-          test "$(grep -c "tag: ${SHA}" apps/hypolia/images.yaml)" -ge 3
+          test "$(grep -c "tag: ${SHA}" apps/hypolia/images.yaml)" -ge 2
+          grep -q "tag: ${RSPIGOT_REF}" apps/hypolia/images.yaml
 
       - name: Commit and push
         env:

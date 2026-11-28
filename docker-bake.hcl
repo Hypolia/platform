@@ -56,7 +56,7 @@ target "orchestrator" {
 target "proxy" {
   inherits = ["_common"]
   target   = "proxy"
-  tags     = image_tags("proxy")
+  tags     = ["${IMAGE_REGISTRY}/proxy:${RSPIGOT_REF}"]
 }
 
 target "proxy-plugin" {

@@ -112,9 +112,7 @@ FROM ${DISTROLESS_IMAGE} AS proxy
 
 COPY --from=proxy-builder /usr/local/bin/rspigot-proxy /usr/local/bin/rspigot-proxy
 EXPOSE 25565 25579 9100
-ARG HYPOLIA_VERSION=dev
 ARG RSPIGOT_REF=local
-ENV HYPOLIA_VERSION=${HYPOLIA_VERSION} \
-    RSPIGOT_REF=${RSPIGOT_REF}
+ENV RSPIGOT_REF=${RSPIGOT_REF}
 STOPSIGNAL SIGTERM
 ENTRYPOINT ["/usr/local/bin/rspigot-proxy", "/etc/rspigot-proxy"]

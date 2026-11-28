@@ -263,7 +263,7 @@ deacoudre:
     repository: deacoudre-server
     tag: ""
   port: 25565
-  grpcPort: 25582
+  grpcPort: 25583
   resources:
     rspigot:
       requests:

@@ -34,11 +34,23 @@ pub const TOWERWARS: GameSpec = GameSpec {
     s3_maps: false,
 };
 
+pub const DEACOUDRE: GameSpec = GameSpec {
+    game: GameKind::DeACoudre,
+    component: "deacoudre",
+    pod_prefix: "deacoudre",
+    env_prefix: "DEACOUDRE",
+    display_name: "Dé à coudre",
+    default_image: "ghcr.io/hypolia/deacoudre:latest",
+    default_max_players: 8,
+    s3_maps: false,
+};
+
 impl GameSpec {
     pub const fn of(game: GameKind) -> &'static Self {
         match game {
             GameKind::SheepWars => &SHEEPWARS,
             GameKind::TowerWars => &TOWERWARS,
+            GameKind::DeACoudre => &DEACOUDRE,
         }
     }
 
@@ -65,6 +77,22 @@ mod tests {
             assert_eq!(GameSpec::of(game).component, game.slug());
         }
         assert_ne!(SHEEPWARS.pod_prefix, TOWERWARS.pod_prefix);
+        assert_ne!(DEACOUDRE.pod_prefix, TOWERWARS.pod_prefix);
+        assert_ne!(DEACOUDRE.pod_prefix, SHEEPWARS.pod_prefix);
+    }
+
+    #[test]
+    fn deacoudre_spec_has_its_own_identity() {
+        let spec = GameSpec::of(GameKind::DeACoudre);
+        assert_eq!(spec.component, "deacoudre");
+        assert_eq!(spec.env_name("MAX_PLAYERS"), "DEACOUDRE_MAX_PLAYERS");
+        assert_eq!(spec.default_max_players, 8);
+        assert_eq!(spec.default_image, "ghcr.io/hypolia/deacoudre:latest");
+        assert!(!spec.s3_maps);
+        assert_eq!(
+            spec.pod_selector(),
+            "app.kubernetes.io/component=deacoudre,app.kubernetes.io/managed-by=hypolia-orchestrator"
+        );
     }
 
     #[test]

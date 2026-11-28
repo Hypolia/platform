@@ -20,6 +20,9 @@ spec:
         {{- if .Values.orchestrator.towerwars.enabled }}
         checksum/towerwars-template: {{ include (print $.Template.BasePath "/towerwars-template-cm.yaml") . | sha256sum }}
         {{- end }}
+        {{- if .Values.orchestrator.deacoudre.enabled }}
+        checksum/deacoudre-template: {{ include (print $.Template.BasePath "/deacoudre-template-cm.yaml") . | sha256sum }}
+        {{- end }}
       labels:
         {{- include "hypolia.labels" . | nindent 8 }}
         app.kubernetes.io/component: orchestrator
@@ -121,6 +124,36 @@ spec:
               value: {{ .Values.orchestrator.towerwars.map | quote }}
             {{- end }}
             {{- end }}
+            {{- if .Values.orchestrator.deacoudre.enabled }}
+            - name: DEACOUDRE_ENABLED
+              value: "true"
+            - name: DEACOUDRE_MAX_PLAYERS
+              value: {{ .Values.orchestrator.deacoudre.maxPlayers | quote }}
+            - name: DEACOUDRE_MIN_REPLICAS
+              value: {{ .Values.orchestrator.deacoudre.minReplicas | quote }}
+            - name: DEACOUDRE_MAX_REPLICAS
+              value: {{ .Values.orchestrator.deacoudre.maxReplicas | quote }}
+            - name: DEACOUDRE_STANDBY_SERVERS
+              value: {{ .Values.orchestrator.deacoudre.standbyServers | quote }}
+            - name: DEACOUDRE_QUEUE_MIN_PLAYERS
+              value: {{ .Values.orchestrator.deacoudre.queueMinPlayers | quote }}
+            - name: DEACOUDRE_IDLE_TTL_SECS
+              value: {{ .Values.orchestrator.deacoudre.idleTtlSecs | quote }}
+            - name: DEACOUDRE_STARTING_TIMEOUT_SECS
+              value: {{ .Values.orchestrator.deacoudre.startingTimeoutSecs | quote }}
+            - name: DEACOUDRE_EMPTY_GRACE_SECS
+              value: {{ .Values.orchestrator.deacoudre.emptyGraceSecs | quote }}
+            - name: DEACOUDRE_ENDING_TIMEOUT_SECS
+              value: {{ .Values.orchestrator.deacoudre.endingTimeoutSecs | quote }}
+            - name: DEACOUDRE_HEARTBEAT_TIMEOUT_SECS
+              value: {{ .Values.orchestrator.deacoudre.heartbeatTimeoutSecs | quote }}
+            - name: DEACOUDRE_CRD_ENABLED
+              value: {{ .Values.orchestrator.deacoudre.crd.enabled | quote }}
+            - name: DEACOUDRE_PORT
+              value: {{ .Values.deacoudre.port | quote }}
+            - name: DEACOUDRE_POD_TEMPLATE_PATH
+              value: "/etc/hypolia/deacoudre-template/pod-template.yaml"
+            {{- end }}
             {{- if (include "hypolia.orchestratorTokenSecretName" .) }}
             - name: ORCHESTRATOR_TOKEN
               valueFrom:
@@ -185,6 +218,11 @@ spec:
               mountPath: /etc/hypolia/towerwars-template
               readOnly: true
             {{- end }}
+            {{- if .Values.orchestrator.deacoudre.enabled }}
+            - name: deacoudre-pod-template
+              mountPath: /etc/hypolia/deacoudre-template
+              readOnly: true
+            {{- end }}
       volumes:
         - name: pod-template
           configMap:
@@ -193,6 +231,11 @@ spec:
         - name: towerwars-pod-template
           configMap:
             name: {{ include "hypolia.fullname" . }}-towerwars-template
+        {{- end }}
+        {{- if .Values.orchestrator.deacoudre.enabled }}
+        - name: deacoudre-pod-template
+          configMap:
+            name: {{ include "hypolia.fullname" . }}-deacoudre-template
         {{- end }}
 ---
 apiVersion: v1

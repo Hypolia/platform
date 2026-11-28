@@ -16,8 +16,8 @@ use uuid::Uuid;
 use crate::api::AppState;
 use crate::config::{GameConfig, OrchestratorConfig};
 use crate::crd::{
-    GameServerObject, GameServerStatus, SheepWarsServer, TowerWarsServer, desired_status,
-    needs_patch, new_server, owner_reference,
+    DeACoudreServer, GameServerObject, GameServerStatus, SheepWarsServer, TowerWarsServer,
+    desired_status, needs_patch, new_server, owner_reference,
 };
 use crate::engine::{FleetEngine, ServerDeletion};
 
@@ -321,6 +321,14 @@ pub async fn run_k8s_reconcile_loop(state: AppState, config: OrchestratorConfig)
             }
             GameKind::TowerWars => {
                 tasks.spawn(run_game_reconcile_loop::<TowerWarsServer>(
+                    state,
+                    config,
+                    game_config,
+                    client,
+                ));
+            }
+            GameKind::DeACoudre => {
+                tasks.spawn(run_game_reconcile_loop::<DeACoudreServer>(
                     state,
                     config,
                     game_config,
@@ -722,6 +730,10 @@ mod tests {
             ("TOWERWARS_IMAGE", "ghcr.io/hypolia/towerwars:dev"),
             ("TOWERWARS_PORT", "25566"),
             ("TOWERWARS_MAX_PLAYERS", "12"),
+            ("DEACOUDRE_ENABLED", "true"),
+            ("DEACOUDRE_IMAGE", "ghcr.io/hypolia/deacoudre:dev"),
+            ("DEACOUDRE_PORT", "25567"),
+            ("DEACOUDRE_MAX_PLAYERS", "8"),
         ]);
         OrchestratorConfig::from_lookup(|name| vars.get(name).map(|v| (*v).to_owned()), None)
             .unwrap()
@@ -736,6 +748,12 @@ mod tests {
         let config = test_config();
         let tower = config.towerwars.as_ref().unwrap();
         build_pod(name, &config, tower, template, map)
+    }
+
+    fn deacoudre_pod(name: &str, template: Option<&PodTemplateSpec>) -> Pod {
+        let config = test_config();
+        let dac = config.deacoudre.as_ref().unwrap();
+        build_pod(name, &config, dac, template, None)
     }
 
     fn env_of<'a>(container: &'a Container, name: &str) -> Option<&'a str> {
@@ -958,11 +976,58 @@ mod tests {
     }
 
     #[test]
+    fn deacoudre_pod_has_its_own_labels_image_and_env() {
+        let pod = deacoudre_pod("deacoudre-abc123", None);
+        assert_eq!(pod.metadata.name.as_deref(), Some("deacoudre-abc123"));
+        let labels = pod.metadata.labels.as_ref().unwrap();
+        assert_eq!(
+            labels
+                .get("app.kubernetes.io/component")
+                .map(String::as_str),
+            Some("deacoudre")
+        );
+        assert_eq!(
+            labels.get("hypolia.io/server-id").map(String::as_str),
+            Some("deacoudre-abc123")
+        );
+        assert!(!labels.contains_key("hypolia.io/map"));
+        let container = &pod.spec.as_ref().unwrap().containers[0];
+        assert_eq!(
+            container.image.as_deref(),
+            Some("ghcr.io/hypolia/deacoudre:dev")
+        );
+        assert_eq!(container.ports.as_ref().unwrap()[0].container_port, 25567);
+        assert_eq!(env_of(container, "SERVER_ID"), Some("deacoudre-abc123"));
+        assert_eq!(env_of(container, "DEACOUDRE_MAX_PLAYERS"), Some("8"));
+        assert_eq!(env_of(container, "DEACOUDRE_MAP_NAME"), None);
+        assert_eq!(env_of(container, "TOWERWARS_MAX_PLAYERS"), None);
+    }
+
+    #[test]
+    fn deacoudre_pod_is_owned_by_a_deacoudreserver() {
+        let mut server = new_server::<DeACoudreServer>(
+            "deacoudre-abc123",
+            "hypolia",
+            BTreeMap::new(),
+            "h",
+            None,
+        );
+        server.metadata.uid = Some("uid-3".to_owned());
+        let mut pod = deacoudre_pod("deacoudre-abc123", None);
+        attach_owner(&mut pod, owner_reference(&server));
+        let owners = pod.metadata.owner_references.unwrap();
+        assert_eq!(owners.len(), 1);
+        assert_eq!(owners[0].kind, "DeACoudreServer");
+        assert_eq!(owners[0].controller, Some(true));
+    }
+
+    #[test]
     fn each_game_lists_only_its_own_pods() {
         let config = test_config();
         let selectors: Vec<String> = config.games().map(|g| g.spec().pod_selector()).collect();
-        assert_eq!(selectors.len(), 2);
+        assert_eq!(selectors.len(), 3);
         assert!(selectors[0].contains("component=sheepwars"));
         assert!(selectors[1].contains("component=towerwars"));
+        assert!(selectors[2].contains("component=deacoudre"));
     }
 }

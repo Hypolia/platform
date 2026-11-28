@@ -87,6 +87,13 @@ game_server_crd!(
     "towerwarsservers",
     "tws"
 );
+game_server_crd!(
+    DeACoudreServerSpec,
+    DeACoudreServer,
+    "DeACoudreServer",
+    "deacoudreservers",
+    "dacs"
+);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -306,6 +313,45 @@ mod tests {
             .unwrap()
             .remove("annotations");
         assert_eq!(chart, serde_json::to_value(TowerWarsServer::crd()).unwrap());
+    }
+
+    #[test]
+    fn chart_deacoudre_crd_matches_generated_crd() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../deploy/charts/hypolia/templates/deacoudreservers-crd.yaml"
+        );
+        let raw = std::fs::read_to_string(path).unwrap();
+        let lines: Vec<&str> = raw.lines().collect();
+        let body = lines[1..lines.len() - 1].join("\n");
+        let mut chart: serde_json::Value = serde_yaml::from_str(&body).unwrap();
+        chart["metadata"]
+            .as_object_mut()
+            .unwrap()
+            .remove("annotations");
+        assert_eq!(chart, serde_json::to_value(DeACoudreServer::crd()).unwrap());
+    }
+
+    #[test]
+    fn deacoudre_crd_has_its_own_names() {
+        let crd = DeACoudreServer::crd();
+        assert_eq!(
+            crd.metadata.name.as_deref(),
+            Some("deacoudreservers.hypolia.io")
+        );
+        assert_eq!(crd.spec.names.kind, "DeACoudreServer");
+        assert_eq!(crd.spec.names.plural, "deacoudreservers");
+        assert_eq!(crd.spec.names.short_names, Some(vec!["dacs".to_owned()]));
+    }
+
+    #[test]
+    fn deacoudre_owner_reference_points_to_a_deacoudreserver() {
+        let mut server =
+            new_server::<DeACoudreServer>("deacoudre-abc123", "ns", BTreeMap::new(), "h", None);
+        server.metadata.uid = Some("uid-3".to_owned());
+        let owner = owner_reference(&server).unwrap();
+        assert_eq!(owner.kind, "DeACoudreServer");
+        assert_eq!(owner.controller, Some(true));
     }
 
     #[test]

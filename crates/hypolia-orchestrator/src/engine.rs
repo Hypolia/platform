@@ -20,6 +20,7 @@ const fn seq_lane_offset(game: GameKind) -> u64 {
     match game {
         GameKind::SheepWars => 0,
         GameKind::TowerWars => SEQ_LANE_WIDTH,
+        GameKind::DeACoudre => 2 * SEQ_LANE_WIDTH,
     }
 }
 
@@ -1749,7 +1750,7 @@ impl FleetEngine {
                     );
                 MIN_LANES * usize::from(size)
             }
-            GameKind::SheepWars => self.policy.queue_min_players,
+            GameKind::SheepWars | GameKind::DeACoudre => self.policy.queue_min_players,
         }
     }
 

@@ -33,6 +33,14 @@ rules:
     resources: ["towerwarsservers/status"]
     verbs: ["get", "patch"]
   {{- end }}
+  {{- if and .Values.orchestrator.deacoudre.enabled .Values.orchestrator.deacoudre.crd.enabled }}
+  - apiGroups: ["hypolia.io"]
+    resources: ["deacoudreservers"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: ["hypolia.io"]
+    resources: ["deacoudreservers/status"]
+    verbs: ["get", "patch"]
+  {{- end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

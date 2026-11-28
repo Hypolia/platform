@@ -6,7 +6,7 @@ use hypolia_protocol::GameKind;
 use thiserror::Error;
 
 use crate::engine::FleetPolicy;
-use crate::game::{GameSpec, SHEEPWARS, TOWERWARS};
+use crate::game::{DEACOUDRE, GameSpec, SHEEPWARS, TOWERWARS};
 use crate::s3::{S3Config, S3Error};
 
 #[derive(Debug, Error)]
@@ -139,6 +139,7 @@ pub struct OrchestratorConfig {
     pub progression_database_url: Option<String>,
     pub sheepwars: GameConfig,
     pub towerwars: Option<GameConfig>,
+    pub deacoudre: Option<GameConfig>,
 }
 
 fn non_empty_env(name: &str) -> Option<String> {
@@ -225,6 +226,13 @@ impl OrchestratorConfig {
             None
         };
 
+        let deacoudre_enabled = env(&DEACOUDRE.env_name("ENABLED")).is_some_and(|v| is_truthy(&v));
+        let deacoudre = if deacoudre_enabled {
+            Some(GameConfig::from_lookup(&DEACOUDRE, &env)?)
+        } else {
+            None
+        };
+
         Ok(Self {
             bind_addr,
             backend,
@@ -243,11 +251,14 @@ impl OrchestratorConfig {
             progression_database_url: env("PROGRESSION_DATABASE_URL"),
             sheepwars: GameConfig::from_lookup(&SHEEPWARS, &env)?,
             towerwars,
+            deacoudre,
         })
     }
 
     pub fn games(&self) -> impl Iterator<Item = &GameConfig> {
-        std::iter::once(&self.sheepwars).chain(self.towerwars.as_ref())
+        std::iter::once(&self.sheepwars)
+            .chain(self.towerwars.as_ref())
+            .chain(self.deacoudre.as_ref())
     }
 
     pub fn policy(&self, game: &GameConfig) -> FleetPolicy {
@@ -374,6 +385,35 @@ mod tests {
         assert_eq!(tower.fixed_map.as_deref(), Some("test"));
         assert_eq!(config.sheepwars.max_replicas, 7);
         assert_eq!(config.games().count(), 2);
+    }
+
+    #[test]
+    fn deacoudre_is_disabled_by_default() {
+        assert!(config(&[]).deacoudre.is_none());
+        let off = config(&[("DEACOUDRE_ENABLED", "false"), ("DEACOUDRE_IMAGE", "x")]);
+        assert!(off.deacoudre.is_none());
+    }
+
+    #[test]
+    fn deacoudre_enabled_reads_its_own_variables() {
+        let config = config(&[
+            ("DEACOUDRE_ENABLED", "true"),
+            ("DEACOUDRE_IMAGE", "registry/dac:1"),
+            ("DEACOUDRE_PORT", "25571"),
+            ("DEACOUDRE_MAX_REPLICAS", "4"),
+            ("DEACOUDRE_STANDBY_SERVERS", "2"),
+            ("SHEEPWARS_MAX_REPLICAS", "7"),
+        ]);
+        let dac = config.deacoudre.as_ref().unwrap();
+        assert_eq!(dac.game, GameKind::DeACoudre);
+        assert_eq!(dac.image, "registry/dac:1");
+        assert_eq!(dac.port, 25571);
+        assert_eq!(dac.max_replicas, 4);
+        assert_eq!(dac.standby_servers, 2);
+        assert_eq!(dac.max_players_per_server, 8);
+        assert_eq!(config.sheepwars.max_replicas, 7);
+        assert_eq!(config.games().count(), 2);
+        assert_eq!(config.policy(dac).game, GameKind::DeACoudre);
     }
 
     #[test]

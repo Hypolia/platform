@@ -1,0 +1,116 @@
+{{- if .Values.orchestrator.deacoudre.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "hypolia.fullname" . }}-deacoudre-template
+  labels:
+    {{- include "hypolia.labels" . | nindent 4 }}
+    app.kubernetes.io/component: orchestrator
+data:
+  pod-template.yaml: |
+    metadata:
+      labels:
+        app.kubernetes.io/name: hypolia
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: deacoudre
+    spec:
+      restartPolicy: Never
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.deacoudre.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.deacoudre.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: rspigot
+          image: {{ include "hypolia.image" (dict "global" .Values.global "repository" .Values.deacoudre.rspigotImage.repository "tag" .Values.deacoudre.rspigotImage.tag) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          env:
+            - name: SERVER_PORT
+              value: {{ .Values.deacoudre.port | quote }}
+            - name: PLUGIN_GRPC_BIND
+              value: {{ printf "127.0.0.1:%d" (int .Values.deacoudre.grpcPort) | quote }}
+            - name: DEACOUDRE_MAX_PLAYERS
+              value: {{ .Values.orchestrator.deacoudre.maxPlayers | quote }}
+          ports:
+            - name: minecraft
+              containerPort: {{ .Values.deacoudre.port }}
+              protocol: TCP
+            - name: grpc-plugin
+              containerPort: {{ .Values.deacoudre.grpcPort }}
+              protocol: TCP
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.deacoudre.port }}
+            initialDelaySeconds: 2
+            periodSeconds: 2
+          livenessProbe:
+            tcpSocket:
+              port: {{ .Values.deacoudre.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          {{- with .Values.deacoudre.resources.rspigot }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: forwarding-secret
+              mountPath: /etc/hypolia/forwarding
+              readOnly: true
+            - name: world-data
+              mountPath: /data
+        {{- if .Values.deacoudre.pluginSidecar.enabled }}
+        - name: deacoudre-plugin
+          {{- if kindIs "string" .Values.deacoudre.pluginSidecar.image }}
+          image: {{ .Values.deacoudre.pluginSidecar.image }}
+          {{- else }}
+          image: {{ include "hypolia.image" (dict "global" .Values.global "repository" .Values.deacoudre.pluginSidecar.image.repository "tag" .Values.deacoudre.pluginSidecar.image.tag) }}
+          {{- end }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          env:
+            - name: RSPIGOT_URL
+              value: {{ printf "http://127.0.0.1:%d" (int .Values.deacoudre.grpcPort) | quote }}
+            - name: RSPIGOT_PLUGIN_NAME
+              value: "hypolia-deacoudre"
+            - name: DEACOUDRE_EPHEMERAL
+              value: "true"
+            - name: DEACOUDRE_MIN_PLAYERS
+              value: {{ .Values.orchestrator.deacoudre.queueMinPlayers | quote }}
+            - name: DEACOUDRE_MAX_PLAYERS
+              value: {{ .Values.orchestrator.deacoudre.maxPlayers | quote }}
+            - name: DEACOUDRE_ROUNDS
+              value: {{ .Values.orchestrator.deacoudre.rounds | quote }}
+            - name: DEACOUDRE_ARENA_PATH
+              value: {{ .Values.orchestrator.deacoudre.arenaPath | quote }}
+            {{- if (include "hypolia.orchestratorTokenSecretName" .) }}
+            - name: ORCHESTRATOR_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "hypolia.orchestratorTokenSecretName" . }}
+                  key: token
+            {{- end }}
+            {{- with .Values.deacoudre.pluginSidecar.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.deacoudre.pluginSidecar.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: world-data
+              mountPath: /data
+              readOnly: true
+        {{- end }}
+      volumes:
+        - name: forwarding-secret
+          secret:
+            secretName: {{ include "hypolia.forwardingSecretName" . }}
+        - name: world-data
+          emptyDir: {}
+{{- end }}

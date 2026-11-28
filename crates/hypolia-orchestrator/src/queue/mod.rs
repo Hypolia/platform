@@ -25,7 +25,7 @@ pub const fn normalize_match_size(game: GameKind, raw: u8) -> u8 {
     match game {
         GameKind::TowerWars if raw == MAX_MATCH_SIZE => MAX_MATCH_SIZE,
         GameKind::TowerWars => 1,
-        GameKind::SheepWars => 0,
+        GameKind::SheepWars | GameKind::DeACoudre => 0,
     }
 }
 

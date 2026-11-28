@@ -429,6 +429,33 @@ mod tests {
     }
 
     #[test]
+    fn a_deacoudre_entry_goes_to_a_deacoudre_server_only() {
+        let mut games = both();
+        games.insert_engine(FleetEngine::new(policy(GameKind::DeACoudre, 0, 3, 1)));
+        let now = Instant::now();
+        games
+            .apply_heartbeat(now, beat(ServerKind::SheepWars, "sheepwars-1", &[]))
+            .unwrap();
+        games
+            .apply_heartbeat(now, beat(ServerKind::DeACoudre, "deacoudre-1", &[]))
+            .unwrap();
+
+        let (first, _) = games
+            .join(now, join_request(1, GameKind::DeACoudre), None)
+            .unwrap();
+        assert_eq!(first.status, QueueJoinStatus::Queued);
+        let (second, events) = games
+            .join(now, join_request(2, GameKind::DeACoudre), None)
+            .unwrap();
+        assert_eq!(second.status, QueueJoinStatus::Transferring);
+        assert_eq!(second.target_server.as_deref(), Some("deacoudre-1"));
+        assert_eq!(transfer_target(&events, uid(2)), Some("deacoudre-1"));
+        let sheep = games.engine(GameKind::SheepWars).unwrap();
+        assert!(!sheep.holds_player(uid(1)));
+        assert!(!sheep.holds_player(uid(2)));
+    }
+
+    #[test]
     fn spec_tw_26_a_sheepwars_entry_goes_to_a_sheepwars_server_only() {
         let mut games = both();
         let now = Instant::now();

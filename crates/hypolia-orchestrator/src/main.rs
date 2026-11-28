@@ -28,6 +28,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let others: Vec<FleetPolicy> = config
         .towerwars
         .iter()
+        .chain(config.deacoudre.iter())
         .map(|game| config.policy(game))
         .collect();
 
